@@ -1,0 +1,1600 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           targetNamespace="http://xai.eati/model/v2"
+           xmlns:eati="http://xai.eati/model/v2"
+           elementFormDefault="qualified">
+
+    <!-- 基础数据类型 -->
+    <xs:simpleType name="Coordinate">
+        <xs:restriction base="xs:double"/>
+    </xs:simpleType>
+    
+    <xs:simpleType name="Probability">
+        <xs:restriction base="xs:double">
+            <xs:minInclusive value="0.0"/>
+            <xs:maxInclusive value="1.0"/>
+        </xs:restriction>
+    </xs:simpleType>
+    
+    <xs:simpleType name="Time">
+        <xs:restriction base="xs:double">
+            <xs:minInclusive value="0.0"/>
+        </xs:restriction>
+    </xs:simpleType>
+    
+    <xs:simpleType name="Quantity">
+        <xs:restriction base="xs:integer">
+            <xs:minInclusive value="0"/>
+        </xs:restriction>
+    </xs:simpleType>
+    
+    <!-- 变量类型定义 -->
+    <xs:simpleType name="VariableType">
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="integer"/>
+            <xs:enumeration value="double"/>
+            <xs:enumeration value="boolean"/>
+            <xs:enumeration value="string"/>
+            <xs:enumeration value="time"/>
+            <xs:enumeration value="resource"/>
+            <xs:enumeration value="queue"/>
+            <xs:enumeration value="container"/>
+            <xs:enumeration value="store"/>
+            <xs:enumeration value="list"/>
+            <xs:enumeration value="dict"/>
+        </xs:restriction>
+    </xs:simpleType>
+    
+    <!-- 分布类型定义 -->
+    <xs:simpleType name="DistributionType">
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="constant"/>
+            <xs:enumeration value="exponential"/>
+            <xs:enumeration value="normal"/>
+            <xs:enumeration value="uniform"/>
+            <xs:enumeration value="triangular"/>
+            <xs:enumeration value="poisson"/>
+            <xs:enumeration value="weibull"/>
+            <xs:enumeration value="gamma"/>
+            <xs:enumeration value="lognormal"/>
+        </xs:restriction>
+    </xs:simpleType>
+    
+    <!-- 运行模式类型 -->
+    <xs:simpleType name="RunModeType">
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="continuous"/>
+            <xs:enumeration value="step"/>
+            <xs:enumeration value="debug"/>
+            <xs:enumeration value="interactive"/>
+            <xs:enumeration value="realtime"/>
+        </xs:restriction>
+    </xs:simpleType>
+
+    <!-- SimPy资源类型 -->
+    <xs:simpleType name="SimPyResourceType">
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="Resource"/>
+            <xs:enumeration value="PriorityResource"/>
+            <xs:enumeration value="PreemptiveResource"/>
+            <xs:enumeration value="Container"/>
+            <xs:enumeration value="Store"/>
+            <xs:enumeration value="FilterStore"/>
+        </xs:restriction>
+    </xs:simpleType>
+
+    <!-- 代码生成配置类型 -->
+    <xs:simpleType name="CodeGenerationTarget">
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="simpy"/>
+            <xs:enumeration value="mesa"/>
+            <xs:enumeration value="anylogic"/>
+            <xs:enumeration value="arena"/>
+        </xs:restriction>
+    </xs:simpleType>
+
+    <!-- **v2.2.1新增: 初始行动执行模式枚举** -->
+    <xs:simpleType name="InitialActionExecutionMode">
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="sequential"/>    <!-- 顺序执行 -->
+            <xs:enumeration value="parallel"/>      <!-- 并行执行 -->
+            <xs:enumeration value="conditional"/>   <!-- 条件执行 -->
+            <xs:enumeration value="priority"/>      <!-- 优先级执行 -->
+            <xs:enumeration value="staged"/>        <!-- 分阶段执行 -->
+        </xs:restriction>
+    </xs:simpleType>
+
+    <!-- **v2.2.1新增: 单个初始行动配置类型** -->
+    <xs:complexType name="InitialActionConfigType">
+        <xs:sequence>
+            <xs:element name="ActionRef" type="xs:string"/>
+            <xs:element name="StartCondition" type="eati:ExpressionType" minOccurs="0"/>
+            <xs:element name="StartDelay" type="eati:TimeDistributionType" minOccurs="0"/>
+            <xs:element name="Priority" type="xs:integer" minOccurs="0" default="0"/>
+            <xs:element name="Stage" type="xs:integer" minOccurs="0" default="1"/>
+            <xs:element name="DependsOn" type="eati:InitialActionDependenciesType" minOccurs="0"/>
+            <xs:element name="ExecutionContext" type="eati:ParametersType" minOccurs="0"/>
+            <xs:element name="FailureAction" type="xs:string" minOccurs="0"/>
+            <xs:element name="MaxRetries" type="xs:integer" minOccurs="0" default="0"/>
+            <xs:element name="RetryDelay" type="eati:TimeDistributionType" minOccurs="0"/>
+            <xs:element name="EnableLogging" type="xs:boolean" minOccurs="0" default="true"/>
+        </xs:sequence>
+        <xs:attribute name="id" type="xs:string" use="required"/>
+        <xs:attribute name="name" type="xs:string" use="optional"/>
+    </xs:complexType>
+
+    <!-- **v2.2.1新增: 初始行动依赖类型** -->
+    <xs:complexType name="InitialActionDependenciesType">
+        <xs:sequence>
+            <xs:element name="Dependency" maxOccurs="unbounded">
+                <xs:complexType>
+                    <xs:sequence>
+                        <xs:element name="ActionRef" type="xs:string"/>
+                        <xs:element name="DependencyType" type="xs:string"/>
+                        <xs:element name="DependencyCondition" type="eati:ExpressionType" minOccurs="0"/>
+                        <xs:element name="TimeoutDuration" type="eati:Time" minOccurs="0"/>
+                        <xs:element name="OnTimeoutAction" type="xs:string" minOccurs="0"/>
+                    </xs:sequence>
+                </xs:complexType>
+            </xs:element>
+        </xs:sequence>
+    </xs:complexType>
+
+    <!-- **v2.2.1新增: 多初始行动配置类型** -->
+    <xs:complexType name="InitialActionsConfigType">
+        <xs:sequence>
+            <xs:element name="ExecutionMode" type="eati:InitialActionExecutionMode"/>
+            <xs:element name="InitialActions" type="eati:InitialActionsListType"/>
+            <xs:element name="GlobalTimeout" type="eati:Time" minOccurs="0"/>
+            <xs:element name="SynchronizationPoint" type="xs:string" minOccurs="0"/>
+            <xs:element name="FailurePolicy" type="xs:string" minOccurs="0"/>
+            <xs:element name="ExecutionOrder" type="eati:ExecutionOrderType" minOccurs="0"/>
+            <xs:element name="CoordinationData" type="eati:ParametersType" minOccurs="0"/>
+            <xs:element name="PreExecutionSetup" type="eati:PreExecutionSetupType" minOccurs="0"/>
+            <xs:element name="PostExecutionCleanup" type="eati:PostExecutionCleanupType" minOccurs="0"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <!-- **v2.2.1新增: 初始行动列表类型** -->
+    <xs:complexType name="InitialActionsListType">
+        <xs:sequence>
+            <xs:element name="InitialAction" type="eati:InitialActionConfigType" maxOccurs="unbounded"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <!-- **v2.2.1新增: 执行顺序类型** -->
+    <xs:complexType name="ExecutionOrderType">
+        <xs:sequence>
+            <xs:element name="OrderingCriteria" type="xs:string"/>
+            <xs:element name="CustomOrder" type="eati:CustomOrderType" minOccurs="0"/>
+            <xs:element name="AllowParallelInStage" type="xs:boolean" minOccurs="0" default="true"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <!-- **v2.2.1新增: 自定义顺序类型** -->
+    <xs:complexType name="CustomOrderType">
+        <xs:sequence>
+            <xs:element name="OrderStep" maxOccurs="unbounded">
+                <xs:complexType>
+                    <xs:sequence>
+                        <xs:element name="StepNumber" type="xs:integer"/>
+                        <xs:element name="ActionRefs" type="eati:ActionRefsType"/>
+                        <xs:element name="StepCondition" type="eati:ExpressionType" minOccurs="0"/>
+                    </xs:sequence>
+                </xs:complexType>
+            </xs:element>
+        </xs:sequence>
+    </xs:complexType>
+
+    <!-- **v2.2.1新增: 行动引用列表类型** -->
+    <xs:complexType name="ActionRefsType">
+        <xs:sequence>
+            <xs:element name="ActionRef" type="xs:string" maxOccurs="unbounded"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <!-- **v2.2.1新增: 执行前设置类型** -->
+    <xs:complexType name="PreExecutionSetupType">
+        <xs:sequence>
+            <xs:element name="SetupActions" type="eati:SetupActionsType" minOccurs="0"/>
+            <xs:element name="EnvironmentChecks" type="eati:EnvironmentChecksType" minOccurs="0"/>
+            <xs:element name="ResourcePreallocation" type="eati:ResourcePreallocationType" minOccurs="0"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <!-- **v2.2.1新增: 执行后清理类型** -->
+    <xs:complexType name="PostExecutionCleanupType">
+        <xs:sequence>
+            <xs:element name="CleanupActions" type="eati:CleanupActionsType" minOccurs="0"/>
+            <xs:element name="ResourceRelease" type="eati:ResourceReleaseType" minOccurs="0"/>
+            <xs:element name="StatusReporting" type="eati:StatusReportingType" minOccurs="0"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <!-- **v2.2.1新增: 支持类型定义** -->
+    <xs:complexType name="SetupActionsType">
+        <xs:sequence>
+            <xs:element name="ActionRef" type="xs:string" maxOccurs="unbounded"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:complexType name="CleanupActionsType">
+        <xs:sequence>
+            <xs:element name="ActionRef" type="xs:string" maxOccurs="unbounded"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:complexType name="EnvironmentChecksType">
+        <xs:sequence>
+            <xs:element name="Check" maxOccurs="unbounded">
+                <xs:complexType>
+                    <xs:sequence>
+                        <xs:element name="CheckName" type="xs:string"/>
+                        <xs:element name="CheckCondition" type="eati:ExpressionType"/>
+                        <xs:element name="OnFailureAction" type="xs:string" minOccurs="0"/>
+                    </xs:sequence>
+                </xs:complexType>
+            </xs:element>
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:complexType name="ResourcePreallocationType">
+        <xs:sequence>
+            <xs:element name="ResourceRequest" maxOccurs="unbounded">
+                <xs:complexType>
+                    <xs:sequence>
+                        <xs:element name="ResourceRef" type="xs:string"/>
+                        <xs:element name="Quantity" type="xs:integer"/>
+                        <xs:element name="ReservationTime" type="eati:Time" minOccurs="0"/>
+                    </xs:sequence>
+                </xs:complexType>
+            </xs:element>
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:complexType name="ResourceReleaseType">
+        <xs:sequence>
+            <xs:element name="ResourceRef" type="xs:string" maxOccurs="unbounded"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:complexType name="StatusReportingType">
+        <xs:sequence>
+            <xs:element name="ReportTarget" type="xs:string" maxOccurs="unbounded"/>
+            <xs:element name="ReportFormat" type="xs:string" minOccurs="0"/>
+            <xs:element name="IncludeMetrics" type="xs:boolean" default="true"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <!-- 根元素 -->
+    <xs:element name="EATIModel">
+        <xs:complexType>
+            <xs:sequence>
+                <xs:element name="ModelMetadata" type="eati:ModelMetadataType" minOccurs="1" maxOccurs="1"/>
+                <xs:element name="CodeGenerationConfig" type="eati:CodeGenerationConfigType" minOccurs="0" maxOccurs="1"/>
+                <xs:element name="SimulationConfig" type="eati:SimulationConfigType" minOccurs="1" maxOccurs="1"/>
+                <xs:element name="InterfaceConfig" type="eati:InterfaceConfigType" minOccurs="0" maxOccurs="1"/>
+                <xs:element name="GlobalVariables" type="eati:GlobalVariablesType" minOccurs="0" maxOccurs="1"/>
+                <xs:element name="Resources" type="eati:ResourcesType" minOccurs="0" maxOccurs="1"/>
+                <xs:element name="Tasks" type="eati:TasksType" minOccurs="1" maxOccurs="1"/>
+                <xs:element name="Entities" type="eati:EntitiesType" minOccurs="1" maxOccurs="1"/>
+                <xs:element name="Actions" type="eati:ActionsType" minOccurs="1" maxOccurs="1"/>
+                <xs:element name="Activities" type="eati:ActivitiesType" minOccurs="1" maxOccurs="1"/>
+                <xs:element name="Interactions" type="eati:InteractionsType" minOccurs="1" maxOccurs="1"/>
+                <xs:element name="Events" type="eati:EventsType" minOccurs="0" maxOccurs="1"/>
+                <xs:element name="Monitors" type="eati:MonitorsType" minOccurs="0" maxOccurs="1"/>
+                <xs:element name="ExternalInterfaces" type="eati:ExternalInterfacesType" minOccurs="0" maxOccurs="1"/>
+                <xs:element name="Visualization" type="eati:VisualizationType" minOccurs="0" maxOccurs="1"/>
+            </xs:sequence>
+            <xs:attribute name="version" type="xs:string" use="required"/>
+            <xs:attribute name="timestamp" type="xs:dateTime" use="required"/>
+            <xs:attribute name="schemaVersion" type="xs:string" use="optional" default="2.2.1"/>
+        </xs:complexType>
+    </xs:element>
+
+    <!-- 模型元数据 -->
+    <xs:complexType name="ModelMetadataType">
+        <xs:sequence>
+            <xs:element name="Name" type="xs:string"/>
+            <xs:element name="Description" type="xs:string" minOccurs="0"/>
+            <xs:element name="Author" type="xs:string" minOccurs="0"/>
+            <xs:element name="Version" type="xs:string" minOccurs="0"/>
+            <xs:element name="Tags" type="eati:TagsType" minOccurs="0"/>
+            <xs:element name="Dependencies" type="eati:DependenciesType" minOccurs="0"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:complexType name="TagsType">
+        <xs:sequence>
+            <xs:element name="Tag" type="xs:string" maxOccurs="unbounded"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:complexType name="DependenciesType">
+        <xs:sequence>
+            <xs:element name="Dependency" maxOccurs="unbounded">
+                <xs:complexType>
+                    <xs:sequence>
+                        <xs:element name="Name" type="xs:string"/>
+                        <xs:element name="Version" type="xs:string" minOccurs="0"/>
+                        <xs:element name="ImportAs" type="xs:string" minOccurs="0"/>
+                    </xs:sequence>
+                </xs:complexType>
+            </xs:element>
+        </xs:sequence>
+    </xs:complexType>
+
+    <!-- 代码生成配置 -->
+    <xs:complexType name="CodeGenerationConfigType">
+        <xs:sequence>
+            <xs:element name="Target" type="eati:CodeGenerationTarget" default="simpy"/>
+            <xs:element name="OutputFormat" type="xs:string" default="python"/>
+            <xs:element name="PackageStructure" type="xs:boolean" default="true"/>
+            <xs:element name="GenerateTests" type="xs:boolean" default="false"/>
+            <xs:element name="GenerateDocumentation" type="xs:boolean" default="false"/>
+            <xs:element name="OptimizationLevel" type="xs:integer" default="1"/>
+            <xs:element name="CustomTemplates" type="eati:CustomTemplatesType" minOccurs="0"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:complexType name="CustomTemplatesType">
+        <xs:sequence>
+            <xs:element name="Template" maxOccurs="unbounded">
+                <xs:complexType>
+                    <xs:sequence>
+                        <xs:element name="Name" type="xs:string"/>
+                        <xs:element name="Path" type="xs:string"/>
+                        <xs:element name="Type" type="xs:string"/>
+                    </xs:sequence>
+                </xs:complexType>
+            </xs:element>
+        </xs:sequence>
+    </xs:complexType>
+
+    <!-- 增强的仿真配置类型 -->
+    <xs:complexType name="SimulationConfigType">
+        <xs:sequence>
+            <xs:element name="StartTime" type="eati:Time" minOccurs="0" maxOccurs="1" default="0"/>
+            <xs:element name="EndTime" type="eati:Time" minOccurs="1" maxOccurs="1"/>
+            <xs:element name="RandomSeed" type="xs:integer" minOccurs="0" maxOccurs="1"/>
+            <xs:element name="TimeUnit" type="xs:string" minOccurs="0" maxOccurs="1" default="second"/>
+            <xs:element name="ReplicationCount" type="xs:integer" minOccurs="0" maxOccurs="1" default="1"/>
+            <xs:element name="RunMode" type="eati:RunModeType" minOccurs="0" maxOccurs="1" default="continuous"/>
+            <xs:element name="StepSize" type="eati:Time" minOccurs="0" maxOccurs="1"/>
+            <xs:element name="RealTimeRatio" type="xs:double" minOccurs="0" maxOccurs="1" default="1.0"/>
+            <xs:element name="WarmupTime" type="eati:Time" minOccurs="0" maxOccurs="1" default="0"/>
+            <xs:element name="SimPyConfig" type="eati:SimPyConfigType" minOccurs="0" maxOccurs="1"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <!-- SimPy特定配置 -->
+    <xs:complexType name="SimPyConfigType">
+        <xs:sequence>
+            <xs:element name="EnableLogging" type="xs:boolean" default="true"/>
+            <xs:element name="LogLevel" type="xs:string" default="INFO"/>
+            <xs:element name="EnableTracing" type="xs:boolean" default="false"/>
+            <xs:element name="EnableProfiler" type="xs:boolean" default="false"/>
+            <xs:element name="MaxProcesses" type="xs:integer" minOccurs="0"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <!-- 接口配置类型 -->
+    <xs:complexType name="InterfaceConfigType">
+        <xs:sequence>
+            <xs:element name="WebSocketConfig" type="eati:WebSocketConfigType" minOccurs="0" maxOccurs="1"/>
+            <xs:element name="RESTAPIConfig" type="eati:RESTAPIConfigType" minOccurs="0" maxOccurs="1"/>
+            <xs:element name="MessageQueueConfig" type="eati:MessageQueueConfigType" minOccurs="0" maxOccurs="1"/>
+            <xs:element name="DataExportConfig" type="eati:DataExportConfigType" minOccurs="0" maxOccurs="1"/>
+        </xs:sequence>
+        <xs:attribute name="enabled" type="xs:boolean" use="required"/>
+    </xs:complexType>
+
+    <!-- WebSocket配置 -->
+    <xs:complexType name="WebSocketConfigType">
+        <xs:sequence>
+            <xs:element name="Host" type="xs:string" default="localhost"/>
+            <xs:element name="Port" type="xs:integer" default="8765"/>
+            <xs:element name="Protocol" type="xs:string" minOccurs="0"/>
+            <xs:element name="Authentication" type="xs:boolean" default="false"/>
+            <xs:element name="HeartbeatInterval" type="xs:integer" minOccurs="0"/>
+        </xs:sequence>
+        <xs:attribute name="enabled" type="xs:boolean" use="required"/>
+    </xs:complexType>
+
+    <!-- REST API配置 -->
+    <xs:complexType name="RESTAPIConfigType">
+        <xs:sequence>
+            <xs:element name="BaseURL" type="xs:string"/>
+            <xs:element name="Port" type="xs:integer" default="8080"/>
+            <xs:element name="APIVersion" type="xs:string" default="v1"/>
+            <xs:element name="Authentication" type="xs:string" minOccurs="0"/>
+        </xs:sequence>
+        <xs:attribute name="enabled" type="xs:boolean" use="required"/>
+    </xs:complexType>
+
+    <!-- 消息队列配置 -->
+    <xs:complexType name="MessageQueueConfigType">
+        <xs:sequence>
+            <xs:element name="Type" type="xs:string"/>
+            <xs:element name="ConnectionString" type="xs:string"/>
+            <xs:element name="Topics" type="eati:TopicsType" minOccurs="0"/>
+        </xs:sequence>
+        <xs:attribute name="enabled" type="xs:boolean" use="required"/>
+    </xs:complexType>
+
+    <xs:complexType name="TopicsType">
+        <xs:sequence>
+            <xs:element name="Topic" maxOccurs="unbounded">
+                <xs:complexType>
+                    <xs:simpleContent>
+                        <xs:extension base="xs:string">
+                            <xs:attribute name="name" type="xs:string" use="required"/>
+                            <xs:attribute name="type" type="xs:string" use="required"/>
+                        </xs:extension>
+                    </xs:simpleContent>
+                </xs:complexType>
+            </xs:element>
+        </xs:sequence>
+    </xs:complexType>
+
+    <!-- 数据导出配置 -->
+    <xs:complexType name="DataExportConfigType">
+        <xs:sequence>
+            <xs:element name="Format" type="xs:string"/>
+            <xs:element name="Interval" type="eati:Time" minOccurs="0"/>
+            <xs:element name="BufferSize" type="xs:integer" minOccurs="0"/>
+            <xs:element name="Compression" type="xs:boolean" default="false"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <!-- 外部接口定义 -->
+    <xs:complexType name="ExternalInterfacesType">
+        <xs:sequence>
+            <xs:element name="CommandInterface" type="eati:CommandInterfaceType" minOccurs="0" maxOccurs="1"/>
+            <xs:element name="DataInterface" type="eati:DataInterfaceType" minOccurs="0" maxOccurs="1"/>
+            <xs:element name="EventInterface" type="eati:EventInterfaceType" minOccurs="0" maxOccurs="1"/>
+            <xs:element name="StateInterface" type="eati:StateInterfaceType" minOccurs="0" maxOccurs="1"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <!-- 命令接口 -->
+    <xs:complexType name="CommandInterfaceType">
+        <xs:sequence>
+            <xs:element name="SupportedCommands" type="eati:SupportedCommandsType"/>
+            <xs:element name="CommandQueue" type="xs:string" minOccurs="0"/>
+            <xs:element name="ResponseTimeout" type="eati:Time" minOccurs="0"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:complexType name="SupportedCommandsType">
+        <xs:sequence>
+            <xs:element name="Command" maxOccurs="unbounded">
+                <xs:complexType>
+                    <xs:sequence>
+                        <xs:element name="Name" type="xs:string"/>
+                        <xs:element name="Parameters" type="eati:ParametersType" minOccurs="0"/>
+                        <xs:element name="Description" type="xs:string" minOccurs="0"/>
+                    </xs:sequence>
+                    <xs:attribute name="id" type="xs:string" use="required"/>
+                </xs:complexType>
+            </xs:element>
+        </xs:sequence>
+    </xs:complexType>
+
+    <!-- 数据接口 -->
+    <xs:complexType name="DataInterfaceType">
+        <xs:sequence>
+            <xs:element name="InputDataPoints" type="eati:DataPointsType" minOccurs="0"/>
+            <xs:element name="OutputDataPoints" type="eati:DataPointsType" minOccurs="0"/>
+            <xs:element name="UpdateMode" type="xs:string"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:complexType name="DataPointsType">
+        <xs:sequence>
+            <xs:element name="DataPoint" maxOccurs="unbounded">
+                <xs:complexType>
+                    <xs:sequence>
+                        <xs:element name="Name" type="xs:string"/>
+                        <xs:element name="Source" type="xs:string"/>
+                        <xs:element name="Type" type="eati:VariableType"/>
+                        <xs:element name="UpdateFrequency" type="eati:Time" minOccurs="0"/>
+                    </xs:sequence>
+                    <xs:attribute name="id" type="xs:string" use="required"/>
+                </xs:complexType>
+            </xs:element>
+        </xs:sequence>
+    </xs:complexType>
+
+    <!-- 事件接口 -->
+    <xs:complexType name="EventInterfaceType">
+        <xs:sequence>
+            <xs:element name="PublishEvents" type="eati:PublishEventsType" minOccurs="0"/>
+            <xs:element name="SubscribeEvents" type="eati:SubscribeEventsType" minOccurs="0"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:complexType name="PublishEventsType">
+        <xs:sequence>
+            <xs:element name="EventType" maxOccurs="unbounded">
+                <xs:complexType>
+                    <xs:sequence>
+                        <xs:element name="Name" type="xs:string"/>
+                        <xs:element name="TriggerSource" type="xs:string"/>
+                        <xs:element name="Payload" type="eati:ParametersType" minOccurs="0"/>
+                    </xs:sequence>
+                </xs:complexType>
+            </xs:element>
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:complexType name="SubscribeEventsType">
+        <xs:sequence>
+            <xs:element name="EventType" maxOccurs="unbounded">
+                <xs:complexType>
+                    <xs:sequence>
+                        <xs:element name="Name" type="xs:string"/>
+                        <xs:element name="Handler" type="xs:string"/>
+                    </xs:sequence>
+                </xs:complexType>
+            </xs:element>
+        </xs:sequence>
+    </xs:complexType>
+
+    <!-- 状态接口 -->
+    <xs:complexType name="StateInterfaceType">
+        <xs:sequence>
+            <xs:element name="StateSnapshot" type="eati:StateSnapshotType"/>
+            <xs:element name="StateTransitions" type="eati:StateTransitionsType" minOccurs="0"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:complexType name="StateSnapshotType">
+        <xs:sequence>
+            <xs:element name="IncludeEntities" type="xs:boolean" default="true"/>
+            <xs:element name="IncludeResources" type="xs:boolean" default="true"/>
+            <xs:element name="IncludeVariables" type="xs:boolean" default="true"/>
+            <xs:element name="IncludeQueues" type="xs:boolean" default="true"/>
+            <xs:element name="SnapshotInterval" type="eati:Time" minOccurs="0"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:complexType name="StateTransitionsType">
+        <xs:sequence>
+            <xs:element name="TrackedTransition" maxOccurs="unbounded">
+                <xs:complexType>
+                    <xs:sequence>
+                        <xs:element name="Source" type="xs:string"/>
+                        <xs:element name="EventName" type="xs:string"/>
+                    </xs:sequence>
+                </xs:complexType>
+            </xs:element>
+        </xs:sequence>
+    </xs:complexType>
+
+    <!-- 可视化配置 -->
+    <xs:complexType name="VisualizationType">
+        <xs:sequence>
+            <xs:element name="ViewDefinitions" type="eati:ViewDefinitionsType" minOccurs="0"/>
+            <xs:element name="AnimationConfig" type="eati:AnimationConfigType" minOccurs="0"/>
+            <xs:element name="DashboardConfig" type="eati:DashboardConfigType" minOccurs="0"/>
+        </xs:sequence>
+        <xs:attribute name="enabled" type="xs:boolean" use="required"/>
+    </xs:complexType>
+
+    <xs:complexType name="ViewDefinitionsType">
+        <xs:sequence>
+            <xs:element name="View" maxOccurs="unbounded">
+                <xs:complexType>
+                    <xs:sequence>
+                        <xs:element name="Name" type="xs:string"/>
+                        <xs:element name="Type" type="xs:string"/>
+                        <xs:element name="Elements" type="eati:ViewElementsType"/>
+                        <xs:element name="UpdateRate" type="xs:integer" minOccurs="0"/>
+                    </xs:sequence>
+                    <xs:attribute name="id" type="xs:string" use="required"/>
+                </xs:complexType>
+            </xs:element>
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:complexType name="ViewElementsType">
+        <xs:sequence>
+            <xs:element name="Element" maxOccurs="unbounded">
+                <xs:complexType>
+                    <xs:sequence>
+                        <xs:element name="Type" type="xs:string"/>
+                        <xs:element name="Target" type="xs:string"/>
+                        <xs:element name="DisplayProperties" type="eati:DisplayPropertiesType" minOccurs="0"/>
+                    </xs:sequence>
+                </xs:complexType>
+            </xs:element>
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:complexType name="DisplayPropertiesType">
+        <xs:sequence>
+            <xs:element name="Property" maxOccurs="unbounded">
+                <xs:complexType>
+                    <xs:simpleContent>
+                        <xs:extension base="xs:string">
+                            <xs:attribute name="name" type="xs:string" use="required"/>
+                        </xs:extension>
+                    </xs:simpleContent>
+                </xs:complexType>
+            </xs:element>
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:complexType name="AnimationConfigType">
+        <xs:sequence>
+            <xs:element name="AnimationSpeed" type="xs:double" default="1.0"/>
+            <xs:element name="ShowTrails" type="xs:boolean" default="false"/>
+            <xs:element name="HighlightActive" type="xs:boolean" default="true"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:complexType name="DashboardConfigType">
+        <xs:sequence>
+            <xs:element name="Widgets" type="eati:WidgetsType"/>
+            <xs:element name="Layout" type="xs:string" minOccurs="0"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:complexType name="WidgetsType">
+        <xs:sequence>
+            <xs:element name="Widget" maxOccurs="unbounded">
+                <xs:complexType>
+                    <xs:sequence>
+                        <xs:element name="Type" type="xs:string"/>
+                        <xs:element name="DataSource" type="xs:string"/>
+                        <xs:element name="Configuration" type="xs:string" minOccurs="0"/>
+                    </xs:sequence>
+                    <xs:attribute name="id" type="xs:string" use="required"/>
+                </xs:complexType>
+            </xs:element>
+        </xs:sequence>
+    </xs:complexType>
+
+    <!-- 全局变量类型 -->
+    <xs:complexType name="GlobalVariablesType">
+        <xs:sequence>
+            <xs:element name="Variable" type="eati:VariableDefinitionType" maxOccurs="unbounded"/>
+        </xs:sequence>
+    </xs:complexType>
+    
+    <xs:complexType name="VariableDefinitionType">
+        <xs:sequence>
+            <xs:element name="Name" type="xs:string"/>
+            <xs:element name="Type" type="eati:VariableType"/>
+            <xs:element name="InitialValue" type="xs:string"/>
+            <xs:element name="Description" type="xs:string" minOccurs="0"/>
+            <xs:element name="Visibility" type="xs:string" minOccurs="0" default="internal"/>
+            <xs:element name="Writable" type="xs:boolean" minOccurs="0" default="false"/>
+            <xs:element name="ValidationRule" type="eati:ExpressionType" minOccurs="0"/>
+        </xs:sequence>
+        <xs:attribute name="id" type="xs:string" use="required"/>
+    </xs:complexType>
+
+    <!-- 增强的资源定义类型 -->
+    <xs:complexType name="ResourcesType">
+        <xs:sequence>
+            <xs:element name="Resource" type="eati:ResourceType" maxOccurs="unbounded"/>
+        </xs:sequence>
+    </xs:complexType>
+    
+    <xs:complexType name="ResourceType">
+        <xs:sequence>
+            <xs:element name="Name" type="xs:string"/>
+            <xs:element name="Type" type="eati:SimPyResourceType"/>
+            <xs:element name="Capacity" type="xs:integer"/>
+            <xs:element name="InitialQuantity" type="xs:integer" minOccurs="0"/>
+            <xs:element name="Attributes" type="eati:AttributesType" minOccurs="0"/>
+            <xs:element name="Monitoring" type="eati:MonitoringType" minOccurs="0"/>
+            <xs:element name="PreemptionPolicy" type="xs:string" minOccurs="0"/>
+            <xs:element name="QueuePolicy" type="xs:string" minOccurs="0"/>
+        </xs:sequence>
+        <xs:attribute name="id" type="xs:string" use="required"/>
+    </xs:complexType>
+
+    <!-- 监控配置 -->
+    <xs:complexType name="MonitoringType">
+        <xs:sequence>
+            <xs:element name="TrackUtilization" type="xs:boolean" default="true"/>
+            <xs:element name="TrackQueueLength" type="xs:boolean" default="true"/>
+            <xs:element name="TrackWaitTime" type="xs:boolean" default="true"/>
+            <xs:element name="PublishMetrics" type="xs:boolean" default="false"/>
+            <xs:element name="SampleInterval" type="eati:Time" minOccurs="0"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <!-- 增强的公式表达式类型 -->
+    <xs:complexType name="ExpressionType">
+        <xs:sequence>
+            <xs:element name="Formula" type="xs:string"/>
+            <xs:element name="Variables" type="eati:VariableReferencesType" minOccurs="0"/>
+            <xs:element name="ReturnType" type="eati:VariableType" minOccurs="0"/>
+            <xs:element name="ExternalData" type="xs:boolean" minOccurs="0" default="false"/>
+            <xs:element name="Language" type="xs:string" minOccurs="0" default="python"/>
+        </xs:sequence>
+    </xs:complexType>
+    
+    <xs:complexType name="VariableReferencesType">
+        <xs:sequence>
+            <xs:element name="VariableRef" type="xs:string" maxOccurs="unbounded"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <!-- 增强的任务类型 -->
+    <xs:complexType name="TasksType">
+        <xs:sequence>
+            <xs:element name="Task" type="eati:TaskType" maxOccurs="unbounded"/>
+        </xs:sequence>
+    </xs:complexType>
+    
+    <!-- **v2.2.1修改: TaskType支持多个初始行动** -->
+    <xs:complexType name="TaskType">
+        <xs:sequence>
+            <xs:element name="Name" type="xs:string"/>
+            <xs:element name="Goal" type="xs:string"/>
+            <xs:element name="Constraints" type="eati:ConstraintsType" minOccurs="0"/>
+            <xs:element name="Priority" type="xs:string"/>
+            <xs:element name="Entities" type="eati:TaskEntitiesType"/>
+            <!-- **v2.2.1修改：支持单一初始行动或多初始行动配置** -->
+            <xs:choice>
+                <!-- 保留向后兼容：单一初始行动 -->
+                <xs:element name="InitialAction" type="xs:string" minOccurs="0"/>
+                <!-- **新增：多初始行动配置** -->
+                <xs:element name="InitialActionsConfig" type="eati:InitialActionsConfigType" minOccurs="0"/>
+            </xs:choice>
+            <xs:element name="ArrivalProcess" type="eati:ArrivalProcessType" minOccurs="0"/>
+            <xs:element name="Inputs" type="eati:InputsType" minOccurs="0"/>
+            <xs:element name="Outputs" type="eati:OutputsType" minOccurs="0"/>
+            <xs:element name="Traceable" type="xs:boolean" minOccurs="0" default="true"/>
+            <xs:element name="TaskLifecycle" type="eati:TaskLifecycleType" minOccurs="0"/>
+        </xs:sequence>
+        <xs:attribute name="id" type="xs:string" use="required"/>
+    </xs:complexType>
+
+    <!-- 任务生命周期 -->
+    <xs:complexType name="TaskLifecycleType">
+        <xs:sequence>
+            <xs:element name="StartCondition" type="eati:ExpressionType" minOccurs="0"/>
+            <xs:element name="CompletionCondition" type="eati:ExpressionType"/>
+            <xs:element name="FailureCondition" type="eati:ExpressionType" minOccurs="0"/>
+            <xs:element name="TimeoutCondition" type="eati:Time" minOccurs="0"/>
+        </xs:sequence>
+    </xs:complexType>
+    
+    <!-- 到达过程类型 -->
+    <xs:complexType name="ArrivalProcessType">
+        <xs:sequence>
+            <xs:element name="Type" type="xs:string"/>
+            <xs:element name="InterarrivalTime" type="eati:TimeDistributionType" minOccurs="0"/>
+            <xs:element name="BatchSize" type="xs:integer" minOccurs="0" default="1"/>
+            <xs:element name="MaxArrivals" type="xs:integer" minOccurs="0"/>
+            <xs:element name="ExternalTrigger" type="xs:string" minOccurs="0"/>
+            <xs:element name="Schedule" type="eati:ScheduleType" minOccurs="0"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <!-- 调度类型 -->
+    <xs:complexType name="ScheduleType">
+        <xs:sequence>
+            <xs:element name="ScheduleEntry" maxOccurs="unbounded">
+                <xs:complexType>
+                    <xs:sequence>
+                        <xs:element name="Time" type="eati:Time"/>
+                        <xs:element name="Count" type="xs:integer" default="1"/>
+                        <xs:element name="Attributes" type="eati:AttributesType" minOccurs="0"/>
+                    </xs:sequence>
+                </xs:complexType>
+            </xs:element>
+        </xs:sequence>
+    </xs:complexType>
+    
+    <!-- 时间分布类型 -->
+    <xs:complexType name="TimeDistributionType">
+        <xs:sequence>
+            <xs:element name="Distribution" type="eati:DistributionType"/>
+            <xs:element name="Parameters" type="eati:DistributionParametersType"/>
+            <xs:element name="TruncationMin" type="xs:double" minOccurs="0"/>
+            <xs:element name="TruncationMax" type="xs:double" minOccurs="0"/>
+        </xs:sequence>
+    </xs:complexType>
+    
+    <xs:complexType name="DistributionParametersType">
+        <xs:sequence>
+            <xs:element name="Parameter" maxOccurs="unbounded">
+                <xs:complexType>
+                    <xs:simpleContent>
+                        <xs:extension base="xs:string">
+                            <xs:attribute name="name" type="xs:string" use="required"/>
+                        </xs:extension>
+                    </xs:simpleContent>
+                </xs:complexType>
+            </xs:element>
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:complexType name="ConstraintsType">
+        <xs:sequence>
+            <xs:element name="Constraint" type="eati:ConstraintType" maxOccurs="unbounded"/>
+        </xs:sequence>
+    </xs:complexType>
+    
+    <xs:complexType name="ConstraintType">
+        <xs:sequence>
+            <xs:element name="Expression" type="eati:ExpressionType"/>
+            <xs:element name="ViolationAction" type="xs:string" minOccurs="0"/>
+        </xs:sequence>
+        <xs:attribute name="name" type="xs:string" use="required"/>
+    </xs:complexType>
+    
+    <xs:complexType name="TaskEntitiesType">
+        <xs:sequence>
+            <xs:element name="EntityRef" type="xs:string" maxOccurs="unbounded"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <!-- 增强的实体类型 -->
+    <xs:complexType name="EntitiesType">
+        <xs:sequence>
+            <xs:element name="Entity" type="eati:EntityType" maxOccurs="unbounded"/>
+        </xs:sequence>
+    </xs:complexType>
+    
+    <xs:complexType name="EntityType">
+        <xs:sequence>
+            <xs:element name="Name" type="xs:string"/>
+            <xs:element name="Type" type="xs:string" minOccurs="0"/>
+            <xs:element name="BaseClass" type="xs:string" minOccurs="0"/>
+            <xs:element name="Position" type="eati:PositionType" minOccurs="0"/>
+            <xs:element name="Attributes" type="eati:AttributesType" minOccurs="0"/>
+            <xs:element name="StateVariables" type="eati:StateVariablesType" minOccurs="0"/>
+            <xs:element name="Actions" type="eati:EntityActionsType"/>
+            <xs:element name="InteractionHandlers" type="eati:InteractionHandlersType" minOccurs="0"/>
+            <xs:element name="Inputs" type="eati:InputsType" minOccurs="0"/>
+            <xs:element name="Outputs" type="eati:OutputsType" minOccurs="0"/>
+            <xs:element name="Visualization" type="eati:EntityVisualizationType" minOccurs="0"/>
+            <xs:element name="Lifecycle" type="eati:EntityLifecycleType" minOccurs="0"/>
+        </xs:sequence>
+        <xs:attribute name="id" type="xs:string" use="required"/>
+    </xs:complexType>
+
+    <!-- 交互处理器定义 -->
+    <xs:complexType name="InteractionHandlersType">
+        <xs:sequence>
+            <xs:element name="Handler" type="eati:InteractionHandlerType" maxOccurs="unbounded"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:complexType name="InteractionHandlerType">
+        <xs:sequence>
+            <xs:element name="InteractionRef" type="xs:string"/>
+            <xs:element name="Role" type="xs:string"/>
+            <xs:element name="PreCondition" type="eati:ExpressionType" minOccurs="0"/>
+            <xs:element name="TargetAction" type="xs:string" minOccurs="0"/>
+            <xs:element name="Response" type="eati:ResponseDefinitionType" minOccurs="0"/>
+            <xs:element name="ErrorHandling" type="eati:ErrorHandlingType" minOccurs="0"/>
+            <xs:element name="Priority" type="xs:integer" minOccurs="0" default="0"/>
+        </xs:sequence>
+        <xs:attribute name="id" type="xs:string" use="required"/>
+    </xs:complexType>
+
+    <xs:complexType name="ResponseDefinitionType">
+        <xs:sequence>
+            <xs:element name="ResponseType" type="xs:string"/>
+            <xs:element name="ResponseDelay" type="eati:TimeDistributionType" minOccurs="0"/>
+            <xs:element name="ResponseCondition" type="eati:ExpressionType" minOccurs="0"/>
+            <xs:element name="ResponseData" type="eati:ParametersType"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:complexType name="ErrorHandlingType">
+        <xs:sequence>
+            <xs:element name="TimeoutAction" type="xs:string" minOccurs="0"/>
+            <xs:element name="FailureAction" type="xs:string" minOccurs="0"/>
+            <xs:element name="RetryPolicy" type="eati:RetryPolicyType" minOccurs="0"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:complexType name="RetryPolicyType">
+        <xs:sequence>
+            <xs:element name="MaxRetries" type="xs:integer"/>
+            <xs:element name="RetryDelay" type="eati:TimeDistributionType"/>
+            <xs:element name="BackoffStrategy" type="xs:string" minOccurs="0"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <!-- 实体生命周期 -->
+    <xs:complexType name="EntityLifecycleType">
+        <xs:sequence>
+            <xs:element name="CreationCondition" type="eati:ExpressionType" minOccurs="0"/>
+            <xs:element name="DestructionCondition" type="eati:ExpressionType" minOccurs="0"/>
+            <xs:element name="InitializationAction" type="xs:string" minOccurs="0"/>
+            <xs:element name="CleanupAction" type="xs:string" minOccurs="0"/>
+        </xs:sequence>
+    </xs:complexType>
+    
+    <!-- 实体可视化配置 -->
+    <xs:complexType name="EntityVisualizationType">
+        <xs:sequence>
+            <xs:element name="Icon" type="xs:string" minOccurs="0"/>
+            <xs:element name="Color" type="xs:string" minOccurs="0"/>
+            <xs:element name="Size" type="xs:double" minOccurs="0"/>
+            <xs:element name="ShowLabel" type="xs:boolean" default="true"/>
+            <xs:element name="TrackMovement" type="xs:boolean" default="false"/>
+        </xs:sequence>
+    </xs:complexType>
+    
+    <!-- 状态变量类型 -->
+    <xs:complexType name="StateVariablesType">
+        <xs:sequence>
+            <xs:element name="StateVariable" type="eati:StateVariableType" maxOccurs="unbounded"/>
+        </xs:sequence>
+    </xs:complexType>
+    
+    <xs:complexType name="StateVariableType">
+        <xs:sequence>
+            <xs:element name="Name" type="xs:string"/>
+            <xs:element name="Type" type="eati:VariableType"/>
+            <xs:element name="InitialValue" type="xs:string"/>
+            <xs:element name="UpdateRule" type="eati:ExpressionType" minOccurs="0"/>
+            <xs:element name="PublishChanges" type="xs:boolean" minOccurs="0" default="false"/>
+            <xs:element name="ValidationRule" type="eati:ExpressionType" minOccurs="0"/>
+            <xs:element name="ChangeEvents" type="eati:ChangeEventsType" minOccurs="0"/>
+        </xs:sequence>
+        <xs:attribute name="id" type="xs:string" use="required"/>
+    </xs:complexType>
+
+    <!-- 状态变化事件 -->
+    <xs:complexType name="ChangeEventsType">
+        <xs:sequence>
+            <xs:element name="ChangeEvent" maxOccurs="unbounded">
+                <xs:complexType>
+                    <xs:sequence>
+                        <xs:element name="Condition" type="eati:ExpressionType"/>
+                        <xs:element name="TriggerAction" type="xs:string"/>
+                    </xs:sequence>
+                </xs:complexType>
+            </xs:element>
+        </xs:sequence>
+    </xs:complexType>
+    
+    <xs:complexType name="PositionType">
+        <xs:sequence>
+            <xs:element name="X" type="eati:Coordinate"/>
+            <xs:element name="Y" type="eati:Coordinate"/>
+            <xs:element name="Z" type="eati:Coordinate" minOccurs="0"/>
+            <xs:element name="Reference" type="xs:string" minOccurs="0"/>
+        </xs:sequence>
+    </xs:complexType>
+    
+    <xs:complexType name="AttributesType">
+        <xs:sequence>
+            <xs:element name="Attribute" type="eati:AttributeType" maxOccurs="unbounded"/>
+        </xs:sequence>
+    </xs:complexType>
+    
+    <xs:complexType name="AttributeType">
+        <xs:simpleContent>
+            <xs:extension base="xs:string">
+                <xs:attribute name="name" type="xs:string" use="required"/>
+                <xs:attribute name="value" type="xs:string" use="required"/>
+                <xs:attribute name="type" type="xs:string" use="required"/>
+                <xs:attribute name="constraint" type="xs:string" use="optional"/>
+                <xs:attribute name="mutable" type="xs:boolean" use="optional" default="true"/>
+            </xs:extension>
+        </xs:simpleContent>
+    </xs:complexType>
+    
+    <xs:complexType name="EntityActionsType">
+        <xs:sequence>
+            <xs:element name="ActionRef" type="xs:string" maxOccurs="unbounded"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <!-- 增强的行动类型 -->
+    <xs:complexType name="ActionsType">
+        <xs:sequence>
+            <xs:element name="Action" type="eati:ActionType" maxOccurs="unbounded"/>
+        </xs:sequence>
+    </xs:complexType>
+    
+    <xs:complexType name="ActionType">
+        <xs:sequence>
+            <xs:element name="Name" type="xs:string"/>
+            <xs:element name="Type" type="xs:string" minOccurs="0"/>
+            <xs:element name="Activities" type="eati:ActionActivitiesType"/>
+            <xs:element name="TriggerCondition" type="eati:TriggerConditionType" minOccurs="0"/>
+            <xs:element name="StartConditions" type="eati:ConditionsType" minOccurs="0"/>
+            <xs:element name="TerminationConditions" type="eati:ConditionsType" minOccurs="0"/>
+            <xs:element name="InterruptionConditions" type="eati:ConditionsType" minOccurs="0"/>
+            <xs:element name="ResourceRequirements" type="eati:ResourceRequirementsType" minOccurs="0"/>
+            <xs:element name="Inputs" type="eati:InputsType" minOccurs="0"/>
+            <xs:element name="Outputs" type="eati:OutputsType" minOccurs="0"/>
+            <xs:element name="Breakpoints" type="eati:BreakpointsType" minOccurs="0"/>
+            <xs:element name="Priority" type="xs:integer" minOccurs="0" default="0"/>
+            <xs:element name="Timeout" type="eati:Time" minOccurs="0"/>
+            <xs:element name="ErrorHandling" type="eati:ActionErrorHandlingType" minOccurs="0"/>
+        </xs:sequence>
+        <xs:attribute name="id" type="xs:string" use="required"/>
+    </xs:complexType>
+
+    <!-- 动作错误处理 -->
+    <xs:complexType name="ActionErrorHandlingType">
+        <xs:sequence>
+            <xs:element name="OnTimeout" type="xs:string" minOccurs="0"/>
+            <xs:element name="OnFailure" type="xs:string" minOccurs="0"/>
+            <xs:element name="OnInterrupt" type="xs:string" minOccurs="0"/>
+            <xs:element name="RetryPolicy" type="eati:RetryPolicyType" minOccurs="0"/>
+        </xs:sequence>
+    </xs:complexType>
+    
+    <!-- 断点配置 -->
+    <xs:complexType name="BreakpointsType">
+        <xs:sequence>
+            <xs:element name="Breakpoint" maxOccurs="unbounded">
+                <xs:complexType>
+                    <xs:sequence>
+                        <xs:element name="Position" type="xs:string"/>
+                        <xs:element name="Condition" type="eati:ExpressionType" minOccurs="0"/>
+                        <xs:element name="PauseSimulation" type="xs:boolean" default="true"/>
+                        <xs:element name="LogData" type="xs:boolean" default="true"/>
+                        <xs:element name="NotifyExternal" type="xs:boolean" default="false"/>
+                    </xs:sequence>
+                    <xs:attribute name="id" type="xs:string" use="required"/>
+                </xs:complexType>
+            </xs:element>
+        </xs:sequence>
+    </xs:complexType>
+    
+    <!-- 触发条件类型（支持公式） -->
+    <xs:complexType name="TriggerConditionType">
+        <xs:sequence>
+            <xs:element name="Type" type="xs:string"/>
+            <xs:element name="Expression" type="eati:ExpressionType"/>
+            <xs:element name="Parameters" type="eati:ParametersType" minOccurs="0"/>
+            <xs:element name="ExternalSource" type="xs:string" minOccurs="0"/>
+            <xs:element name="Priority" type="xs:integer" minOccurs="0" default="0"/>
+        </xs:sequence>
+    </xs:complexType>
+    
+    <!-- 资源需求类型 -->
+    <xs:complexType name="ResourceRequirementsType">
+        <xs:sequence>
+            <xs:element name="ResourceRequirement" maxOccurs="unbounded">
+                <xs:complexType>
+                    <xs:sequence>
+                        <xs:element name="ResourceRef" type="xs:string"/>
+                        <xs:element name="Quantity" type="xs:integer"/>
+                        <xs:element name="Priority" type="xs:integer" minOccurs="0"/>
+                        <xs:element name="Preemptable" type="xs:boolean" minOccurs="0" default="false"/>
+                        <xs:element name="AlternativeResources" type="eati:AlternativeResourcesType" minOccurs="0"/>
+                    </xs:sequence>
+                </xs:complexType>
+            </xs:element>
+        </xs:sequence>
+    </xs:complexType>
+
+    <!-- 替代资源 -->
+    <xs:complexType name="AlternativeResourcesType">
+        <xs:sequence>
+            <xs:element name="Alternative" maxOccurs="unbounded">
+                <xs:complexType>
+                    <xs:sequence>
+                        <xs:element name="ResourceRef" type="xs:string"/>
+                        <xs:element name="ConversionFactor" type="xs:double" default="1.0"/>
+                        <xs:element name="Preference" type="xs:integer" default="0"/>
+                    </xs:sequence>
+                </xs:complexType>
+            </xs:element>
+        </xs:sequence>
+    </xs:complexType>
+    
+    <xs:complexType name="ActionActivitiesType">
+        <xs:sequence>
+            <xs:element name="ActivityRef" type="xs:string" maxOccurs="unbounded"/>
+        </xs:sequence>
+        <xs:attribute name="executionMode" type="xs:string" use="optional" default="sequential"/>
+    </xs:complexType>
+    
+    <xs:complexType name="ConditionsType">
+        <xs:sequence>
+            <xs:element name="Condition" type="eati:ConditionType" maxOccurs="unbounded"/>
+        </xs:sequence>
+        <xs:attribute name="logic" type="xs:string" use="optional" default="AND"/>
+    </xs:complexType>
+    
+    <xs:complexType name="ConditionType">
+        <xs:sequence>
+            <xs:element name="Expression" type="eati:ExpressionType"/>
+            <xs:element name="Weight" type="xs:double" minOccurs="0" default="1.0"/>
+        </xs:sequence>
+        <xs:attribute name="name" type="xs:string" use="required"/>
+        <xs:attribute name="type" type="xs:string" use="optional"/>
+    </xs:complexType>
+
+    <!-- 增强的动作类型 -->
+    <xs:complexType name="ActivitiesType">
+        <xs:sequence>
+            <xs:element name="Activity" type="eati:ActivityType" maxOccurs="unbounded"/>
+        </xs:sequence>
+    </xs:complexType>
+    
+    <xs:complexType name="ActivityType">
+        <xs:sequence>
+            <xs:element name="Name" type="xs:string"/>
+            <xs:element name="Type" type="xs:string"/>
+            <xs:element name="Description" type="xs:string" minOccurs="0"/>
+            <xs:element name="InternalFunction" type="eati:InternalFunctionType" minOccurs="0"/>
+            <xs:element name="ExternalAlgorithm" type="eati:ExternalAlgorithmType" minOccurs="0"/>
+            <xs:element name="DelayTime" type="eati:TimeDistributionType" minOccurs="0"/>
+            <xs:element name="SubActivities" type="eati:SubActivitiesType" minOccurs="0"/>
+            <xs:element name="InteractiveConfig" type="eati:InteractiveConfigType" minOccurs="0"/>
+            <xs:element name="SimPyFunction" type="eati:SimPyFunctionType" minOccurs="0"/>
+            <xs:element name="Inputs" type="eati:InputsType" minOccurs="0"/>
+            <xs:element name="Outputs" type="eati:OutputsType" minOccurs="0"/>
+            <xs:element name="StartConditions" type="eati:ConditionsType" minOccurs="0"/>
+            <xs:element name="TerminationConditions" type="eati:ConditionsType" minOccurs="0"/>
+            <xs:element name="InterruptionConditions" type="eati:ConditionsType" minOccurs="0"/>
+            <xs:element name="LogLevel" type="xs:string" minOccurs="0" default="info"/>
+            <xs:element name="Performance" type="eati:PerformanceConfigType" minOccurs="0"/>
+        </xs:sequence>
+        <xs:attribute name="id" type="xs:string" use="required"/>
+    </xs:complexType>
+
+    <!-- SimPy特定函数类型 -->
+    <xs:complexType name="SimPyFunctionType">
+        <xs:sequence>
+            <xs:element name="FunctionName" type="xs:string"/>
+            <xs:element name="ResourceOperation" type="xs:string" minOccurs="0"/>
+            <xs:element name="ProcessOperation" type="xs:string" minOccurs="0"/>
+            <xs:element name="Code" type="xs:string" minOccurs="0"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <!-- 性能配置 -->
+    <xs:complexType name="PerformanceConfigType">
+        <xs:sequence>
+            <xs:element name="TrackExecutionTime" type="xs:boolean" default="false"/>
+            <xs:element name="TrackMemoryUsage" type="xs:boolean" default="false"/>
+            <xs:element name="CacheResults" type="xs:boolean" default="false"/>
+            <xs:element name="OptimizationHints" type="eati:OptimizationHintsType" minOccurs="0"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:complexType name="OptimizationHintsType">
+        <xs:sequence>
+            <xs:element name="Hint" maxOccurs="unbounded">
+                <xs:complexType>
+                    <xs:simpleContent>
+                        <xs:extension base="xs:string">
+                            <xs:attribute name="type" type="xs:string" use="required"/>
+                        </xs:extension>
+                    </xs:simpleContent>
+                </xs:complexType>
+            </xs:element>
+        </xs:sequence>
+    </xs:complexType>
+    
+    <!-- 交互配置 -->
+    <xs:complexType name="InteractiveConfigType">
+        <xs:sequence>
+            <xs:element name="RequiresUserInput" type="xs:boolean" default="false"/>
+            <xs:element name="InputTimeout" type="eati:Time" minOccurs="0"/>
+            <xs:element name="DefaultAction" type="xs:string" minOccurs="0"/>
+            <xs:element name="UIPrompt" type="xs:string" minOccurs="0"/>
+            <xs:element name="InputValidation" type="eati:ExpressionType" minOccurs="0"/>
+        </xs:sequence>
+    </xs:complexType>
+    
+    <!-- 内部函数类型（支持公式运算） -->
+    <xs:complexType name="InternalFunctionType">
+        <xs:sequence>
+            <xs:element name="FunctionType" type="xs:string"/>
+            <xs:element name="Expression" type="eati:ExpressionType"/>
+            <xs:element name="Assignments" type="eati:AssignmentsType" minOccurs="0"/>
+            <xs:element name="PreConditions" type="eati:ConditionsType" minOccurs="0"/>
+            <xs:element name="PostConditions" type="eati:ConditionsType" minOccurs="0"/>
+        </xs:sequence>
+    </xs:complexType>
+    
+    <!-- 赋值类型 -->
+    <xs:complexType name="AssignmentsType">
+        <xs:sequence>
+            <xs:element name="Assignment" maxOccurs="unbounded">
+                <xs:complexType>
+                    <xs:sequence>
+                        <xs:element name="Target" type="xs:string"/>
+                        <xs:element name="Expression" type="eati:ExpressionType"/>
+                        <xs:element name="Condition" type="eati:ExpressionType" minOccurs="0"/>
+                    </xs:sequence>
+                </xs:complexType>
+            </xs:element>
+        </xs:sequence>
+    </xs:complexType>
+    
+    <!-- 子活动类型 -->
+    <xs:complexType name="SubActivitiesType">
+        <xs:sequence>
+            <xs:element name="SequenceType" type="xs:string"/>
+            <xs:element name="ActivityRef" type="xs:string" maxOccurs="unbounded"/>
+            <xs:element name="LoopCondition" type="eati:ExpressionType" minOccurs="0"/>
+            <xs:element name="ChoiceCondition" type="eati:ChoiceConditionsType" minOccurs="0"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <!-- 选择条件 -->
+    <xs:complexType name="ChoiceConditionsType">
+        <xs:sequence>
+            <xs:element name="Choice" maxOccurs="unbounded">
+                <xs:complexType>
+                    <xs:sequence>
+                        <xs:element name="Condition" type="eati:ExpressionType"/>
+                        <xs:element name="ActivityRef" type="xs:string"/>
+                        <xs:element name="Probability" type="eati:Probability" minOccurs="0"/>
+                    </xs:sequence>
+                </xs:complexType>
+            </xs:element>
+        </xs:sequence>
+    </xs:complexType>
+    
+    <xs:complexType name="ExternalAlgorithmType">
+        <xs:sequence>
+            <xs:element name="Module" type="xs:string"/>
+            <xs:element name="FunctionName" type="xs:string"/>
+            <xs:element name="Parameters" type="eati:ParametersType" minOccurs="0"/>
+            <xs:element name="ImportStatement" type="xs:string" minOccurs="0"/>
+            <xs:element name="ErrorHandling" type="xs:string" minOccurs="0"/>
+        </xs:sequence>
+        <xs:attribute name="id" type="xs:string" use="optional"/>
+    </xs:complexType>
+    
+    <xs:complexType name="ParametersType">
+        <xs:sequence>
+            <xs:element name="Parameter" type="eati:ParameterType" maxOccurs="unbounded"/>
+        </xs:sequence>
+    </xs:complexType>
+    
+    <xs:complexType name="InputsType">
+        <xs:sequence>
+            <xs:element name="Input" type="eati:ParameterType" maxOccurs="unbounded"/>
+        </xs:sequence>
+    </xs:complexType>
+    
+    <xs:complexType name="OutputsType">
+        <xs:sequence>
+            <xs:element name="Output" type="eati:ParameterType" maxOccurs="unbounded"/>
+        </xs:sequence>
+    </xs:complexType>
+    
+    <xs:complexType name="ParameterType">
+        <xs:simpleContent>
+            <xs:extension base="xs:string">
+                <xs:attribute name="name" type="xs:string" use="required"/>
+                <xs:attribute name="type" type="xs:string" use="required"/>
+                <xs:attribute name="default" type="xs:string" use="optional"/>
+                <xs:attribute name="source" type="xs:string" use="optional"/>
+                <xs:attribute name="validation" type="xs:string" use="optional"/>
+            </xs:extension>
+        </xs:simpleContent>
+    </xs:complexType>
+
+    <!-- 增强的交互类型 -->
+    <xs:complexType name="InteractionsType">
+        <xs:sequence>
+            <xs:element name="Interaction" type="eati:InteractionType" maxOccurs="unbounded"/>
+        </xs:sequence>
+    </xs:complexType>
+    
+    <xs:complexType name="InteractionType">
+        <xs:sequence>
+            <xs:element name="Name" type="xs:string"/>
+            <xs:element name="Description" type="xs:string" minOccurs="0"/>
+            <xs:element name="Source" type="xs:string"/>
+            <xs:element name="Target" type="xs:string"/>
+            <xs:element name="SourceActivity" type="xs:string" minOccurs="0"/>
+            <xs:element name="TargetAction" type="xs:string" minOccurs="0"/>
+            <xs:element name="TargetActivity" type="xs:string" minOccurs="0"/>
+            <xs:element name="Type" type="xs:string"/>
+            <xs:element name="Protocol" type="xs:string" minOccurs="0"/>
+            <xs:element name="MessageFormat" type="eati:MessageFormatType" minOccurs="0"/>
+            <xs:element name="TriggerCondition" type="eati:TriggerConditionType" minOccurs="0"/>
+            <xs:element name="ExecutionSemantics" type="eati:ExecutionSemanticsType"/>
+            <xs:element name="QualityOfService" type="eati:QoSType" minOccurs="0"/>
+            <xs:element name="Attributes" type="eati:AttributesType" minOccurs="0"/>
+            <xs:element name="Inputs" type="eati:InputsType" minOccurs="0"/>
+            <xs:element name="Outputs" type="eati:OutputsType" minOccurs="0"/>
+            <xs:element name="Traceable" type="xs:boolean" minOccurs="0" default="true"/>
+            <xs:element name="ErrorHandling" type="eati:InteractionErrorHandlingType" minOccurs="0"/>
+        </xs:sequence>
+        <xs:attribute name="id" type="xs:string" use="required"/>
+    </xs:complexType>
+
+    <!-- 执行语义定义 -->
+    <xs:complexType name="ExecutionSemanticsType">
+        <xs:sequence>
+            <xs:element name="SourceBehavior" type="eati:SourceBehaviorType"/>
+            <xs:element name="TargetBehavior" type="eati:TargetBehaviorType"/>
+            <xs:element name="DeliveryGuarantee" type="xs:string" minOccurs="0"/>
+            <xs:element name="Ordering" type="xs:string" minOccurs="0"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <!-- 源实体行为定义 -->
+    <xs:complexType name="SourceBehaviorType">
+        <xs:sequence>
+            <xs:element name="SendTrigger" type="eati:SendTriggerType"/>
+            <xs:element name="MessageConstruction" type="eati:MessageConstructionType"/>
+            <xs:element name="ResponseHandling" type="eati:ResponseHandlingType" minOccurs="0"/>
+            <xs:element name="TimeoutBehavior" type="eati:TimeoutBehaviorType" minOccurs="0"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <!-- 目标实体行为定义 -->
+    <xs:complexType name="TargetBehaviorType">
+        <xs:sequence>
+            <xs:element name="ReceiveConditions" type="eati:ReceiveConditionsType" minOccurs="0"/>
+            <xs:element name="ProcessingBehavior" type="eati:ProcessingBehaviorType"/>
+            <xs:element name="ResponseGeneration" type="eati:ResponseGenerationType" minOccurs="0"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <!-- 发送触发器 -->
+    <xs:complexType name="SendTriggerType">
+        <xs:sequence>
+            <xs:element name="TriggerType" type="xs:string"/>
+            <xs:element name="TriggerCondition" type="eati:ExpressionType" minOccurs="0"/>
+            <xs:element name="TriggerDelay" type="eati:TimeDistributionType" minOccurs="0"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <!-- 消息构造 -->
+    <xs:complexType name="MessageConstructionType">
+        <xs:sequence>
+            <xs:element name="DataMapping" type="eati:DataMappingType"/>
+            <xs:element name="MessageTemplate" type="xs:string" minOccurs="0"/>
+            <xs:element name="MessageValidation" type="eati:ExpressionType" minOccurs="0"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <!-- 数据映射 -->
+    <xs:complexType name="DataMappingType">
+        <xs:sequence>
+            <xs:element name="Mapping" maxOccurs="unbounded">
+                <xs:complexType>
+                    <xs:sequence>
+                        <xs:element name="SourceField" type="xs:string"/>
+                        <xs:element name="TargetField" type="xs:string"/>
+                        <xs:element name="Transformation" type="eati:ExpressionType" minOccurs="0"/>
+                    </xs:sequence>
+                </xs:complexType>
+            </xs:element>
+        </xs:sequence>
+    </xs:complexType>
+
+    <!-- 响应处理 -->
+    <xs:complexType name="ResponseHandlingType">
+        <xs:sequence>
+            <xs:element name="ExpectedResponse" type="xs:boolean" default="false"/>
+            <xs:element name="ResponseTimeout" type="eati:Time" minOccurs="0"/>
+            <xs:element name="ResponseAction" type="xs:string" minOccurs="0"/>
+            <xs:element name="ResponseValidation" type="eati:ExpressionType" minOccurs="0"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <!-- 超时行为 -->
+    <xs:complexType name="TimeoutBehaviorType">
+        <xs:sequence>
+            <xs:element name="TimeoutDuration" type="eati:Time"/>
+            <xs:element name="TimeoutAction" type="xs:string"/>
+            <xs:element name="RetryPolicy" type="eati:RetryPolicyType" minOccurs="0"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <!-- 接收条件 -->
+    <xs:complexType name="ReceiveConditionsType">
+        <xs:sequence>
+            <xs:element name="AcceptanceCondition" type="eati:ExpressionType" minOccurs="0"/>
+            <xs:element name="FilterCondition" type="eati:ExpressionType" minOccurs="0"/>
+            <xs:element name="QueueBehavior" type="xs:string" minOccurs="0"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <!-- 处理行为 -->
+    <xs:complexType name="ProcessingBehaviorType">
+        <xs:sequence>
+            <xs:element name="ProcessingType" type="xs:string"/>
+            <xs:element name="ProcessingCondition" type="eati:ExpressionType" minOccurs="0"/>
+            <xs:element name="ProcessingDelay" type="eati:TimeDistributionType" minOccurs="0"/>
+            <xs:element name="ActionTrigger" type="eati:ActionTriggerType"/>
+            <xs:element name="StateUpdates" type="eati:StateUpdatesType" minOccurs="0"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <!-- 动作触发器 -->
+    <xs:complexType name="ActionTriggerType">
+        <xs:sequence>
+            <xs:element name="TriggerMode" type="xs:string"/>
+            <xs:element name="TargetAction" type="xs:string"/>
+            <xs:element name="TriggerCondition" type="eati:ExpressionType" minOccurs="0"/>
+            <xs:element name="ContextData" type="eati:ContextDataType" minOccurs="0"/>
+            <xs:element name="Priority" type="xs:integer" minOccurs="0" default="0"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <!-- 上下文数据 -->
+    <xs:complexType name="ContextDataType">
+        <xs:sequence>
+            <xs:element name="DataItem" maxOccurs="unbounded">
+                <xs:complexType>
+                    <xs:sequence>
+                        <xs:element name="Name" type="xs:string"/>
+                        <xs:element name="Source" type="xs:string"/>
+                        <xs:element name="Transformation" type="eati:ExpressionType" minOccurs="0"/>
+                    </xs:sequence>
+                </xs:complexType>
+            </xs:element>
+        </xs:sequence>
+    </xs:complexType>
+
+    <!-- 状态更新 -->
+    <xs:complexType name="StateUpdatesType">
+        <xs:sequence>
+            <xs:element name="StateUpdate" maxOccurs="unbounded">
+                <xs:complexType>
+                    <xs:sequence>
+                        <xs:element name="Target" type="xs:string"/>
+                        <xs:element name="UpdateExpression" type="eati:ExpressionType"/>
+                        <xs:element name="UpdateCondition" type="eati:ExpressionType" minOccurs="0"/>
+                    </xs:sequence>
+                </xs:complexType>
+            </xs:element>
+        </xs:sequence>
+    </xs:complexType>
+
+    <!-- 响应生成 -->
+    <xs:complexType name="ResponseGenerationType">
+        <xs:sequence>
+            <xs:element name="GenerateResponse" type="xs:boolean" default="false"/>
+            <xs:element name="ResponseDelay" type="eati:TimeDistributionType" minOccurs="0"/>
+            <xs:element name="ResponseData" type="eati:ResponseDataType" minOccurs="0"/>
+            <xs:element name="ResponseCondition" type="eati:ExpressionType" minOccurs="0"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <!-- 响应数据 -->
+    <xs:complexType name="ResponseDataType">
+        <xs:sequence>
+            <xs:element name="ResponseField" maxOccurs="unbounded">
+                <xs:complexType>
+                    <xs:sequence>
+                        <xs:element name="Name" type="xs:string"/>
+                        <xs:element name="ValueExpression" type="eati:ExpressionType"/>
+                        <xs:element name="Type" type="eati:VariableType"/>
+                    </xs:sequence>
+                </xs:complexType>
+            </xs:element>
+        </xs:sequence>
+    </xs:complexType>
+
+    <!-- 消息格式 -->
+    <xs:complexType name="MessageFormatType">
+        <xs:sequence>
+            <xs:element name="Format" type="xs:string"/>
+            <xs:element name="Schema" type="xs:string" minOccurs="0"/>
+            <xs:element name="Encoding" type="xs:string" minOccurs="0"/>
+            <xs:element name="Compression" type="xs:string" minOccurs="0"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <!-- 服务质量 -->
+    <xs:complexType name="QoSType">
+        <xs:sequence>
+            <xs:element name="DeliveryReliability" type="xs:string"/>
+            <xs:element name="MaxDeliveryTime" type="eati:Time" minOccurs="0"/>
+            <xs:element name="Priority" type="xs:integer" minOccurs="0" default="0"/>
+            <xs:element name="Persistence" type="xs:boolean" default="false"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <!-- 交互错误处理 -->
+    <xs:complexType name="InteractionErrorHandlingType">
+        <xs:sequence>
+            <xs:element name="DeliveryFailureAction" type="xs:string" minOccurs="0"/>
+            <xs:element name="ProcessingFailureAction" type="xs:string" minOccurs="0"/>
+            <xs:element name="TimeoutAction" type="xs:string" minOccurs="0"/>
+            <xs:element name="DeadLetterQueue" type="xs:string" minOccurs="0"/>
+            <xs:element name="ErrorLogging" type="xs:boolean" default="true"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <!-- 事件类型 -->
+    <xs:complexType name="EventsType">
+        <xs:sequence>
+            <xs:element name="Event" type="eati:EventType" maxOccurs="unbounded"/>
+        </xs:sequence>
+    </xs:complexType>
+    
+    <xs:complexType name="EventType">
+        <xs:sequence>
+            <xs:element name="Name" type="xs:string"/>
+            <xs:element name="Description" type="xs:string" minOccurs="0"/>
+            <xs:element name="Type" type="xs:string"/>
+            <xs:element name="TriggerTime" type="eati:Time" minOccurs="0"/>
+            <xs:element name="TriggerCondition" type="eati:TriggerConditionType" minOccurs="0"/>
+            <xs:element name="Actions" type="eati:EventActionsType"/>
+            <xs:element name="Priority" type="xs:integer" minOccurs="0"/>
+            <xs:element name="Repeatable" type="xs:boolean" minOccurs="0" default="false"/>
+            <xs:element name="RepeatCondition" type="eati:ExpressionType" minOccurs="0"/>
+            <xs:element name="EventData" type="eati:ParametersType" minOccurs="0"/>
+        </xs:sequence>
+        <xs:attribute name="id" type="xs:string" use="required"/>
+    </xs:complexType>
+    
+    <xs:complexType name="EventActionsType">
+        <xs:sequence>
+            <xs:element name="ActionRef" type="xs:string" maxOccurs="unbounded"/>
+        </xs:sequence>
+        <xs:attribute name="executionMode" type="xs:string" use="optional" default="sequential"/>
+    </xs:complexType>
+
+    <!-- 增强的监控器类型 -->
+    <xs:complexType name="MonitorsType">
+        <xs:sequence>
+            <xs:element name="Monitor" type="eati:MonitorType" maxOccurs="unbounded"/>
+        </xs:sequence>
+    </xs:complexType>
+    
+    <xs:complexType name="MonitorType">
+        <xs:sequence>
+            <xs:element name="Name" type="xs:string"/>
+            <xs:element name="Description" type="xs:string" minOccurs="0"/>
+            <xs:element name="Target" type="xs:string"/>
+            <xs:element name="Metric" type="xs:string"/>
+            <xs:element name="SampleInterval" type="eati:Time" minOccurs="0"/>
+            <xs:element name="Aggregation" type="xs:string" minOccurs="0"/>
+            <xs:element name="WindowSize" type="xs:integer" minOccurs="0"/>
+            <xs:element name="OutputFile" type="xs:string" minOccurs="0"/>
+            <xs:element name="OutputFormat" type="xs:string" minOccurs="0"/>
+            <xs:element name="StreamOutput" type="xs:boolean" minOccurs="0" default="false"/>
+            <xs:element name="AlertThresholds" type="eati:AlertThresholdsType" minOccurs="0"/>
+            <xs:element name="DataFilters" type="eati:DataFiltersType" minOccurs="0"/>
+        </xs:sequence>
+        <xs:attribute name="id" type="xs:string" use="required"/>
+    </xs:complexType>
+
+    <!-- 数据过滤器 -->
+    <xs:complexType name="DataFiltersType">
+        <xs:sequence>
+            <xs:element name="Filter" maxOccurs="unbounded">
+                <xs:complexType>
+                    <xs:sequence>
+                        <xs:element name="Condition" type="eati:ExpressionType"/>
+                        <xs:element name="Action" type="xs:string"/>
+                    </xs:sequence>
+                </xs:complexType>
+            </xs:element>
+        </xs:sequence>
+    </xs:complexType>
+    
+    <!-- 告警阈值 -->
+    <xs:complexType name="AlertThresholdsType">
+        <xs:sequence>
+            <xs:element name="Threshold" maxOccurs="unbounded">
+                <xs:complexType>
+                    <xs:sequence>
+                        <xs:element name="Level" type="xs:string"/>
+                        <xs:element name="Condition" type="eati:ExpressionType"/>
+                        <xs:element name="Message" type="xs:string" minOccurs="0"/>
+                        <xs:element name="Action" type="xs:string" minOccurs="0"/>
+                        <xs:element name="CooldownPeriod" type="eati:Time" minOccurs="0"/>
+                    </xs:sequence>
+                </xs:complexType>
+            </xs:element>
+        </xs:sequence>
+    </xs:complexType>
+
+</xs:schema>
