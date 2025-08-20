@@ -1,0 +1,826 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<EATIModel xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+          version="2.0"
+          timestamp="2024-01-16T10:00:00">
+
+   <!-- 仿真配置 -->
+   <SimulationConfig>
+       <StartTime>0</StartTime>
+       <EndTime>1800</EndTime>  <!-- 30分钟仿真 -->
+       <RandomSeed>123</RandomSeed>
+       <TimeUnit>second</TimeUnit>
+       <ReplicationCount>1</ReplicationCount>
+       <RunMode>continuous</RunMode>
+       <StepSize>5</StepSize>
+       <RealTimeRatio>5.0</RealTimeRatio>  <!-- 5倍速 -->
+   </SimulationConfig>
+
+   <!-- 接口配置 -->
+   <InterfaceConfig enabled="true">
+       <WebSocketConfig enabled="true">
+           <Host>localhost</Host>
+           <Port>8765</Port>
+           <HeartbeatInterval>5</HeartbeatInterval>
+       </WebSocketConfig>
+       <DataExportConfig>
+           <Format>json</Format>
+           <Interval>10</Interval>
+           <BufferSize>500</BufferSize>
+           <Compression>false</Compression>
+       </DataExportConfig>
+   </InterfaceConfig>
+
+   <!-- 全局变量 -->
+   <GlobalVariables>
+       <Variable id="gv_enemy_detected">
+           <Name>发现敌情</Name>
+           <Type>boolean</Type>
+           <InitialValue>false</InitialValue>
+           <Visibility>external</Visibility>
+       </Variable>
+       <Variable id="gv_strike_completed">
+           <Name>打击完成</Name>
+           <Type>boolean</Type>
+           <InitialValue>false</InitialValue>
+           <Visibility>external</Visibility>
+       </Variable>
+       <Variable id="gv_damage_assessment">
+           <Name>毁伤评估</Name>
+           <Type>double</Type>
+           <InitialValue>0.0</InitialValue>
+           <Visibility>external</Visibility>
+       </Variable>
+   </GlobalVariables>
+
+   <!-- 资源定义 -->
+   <Resources>
+       <Resource id="res_artillery_rounds">
+           <Name>炮弹储备</Name>
+           <Type>Container</Type>
+           <Capacity>200</Capacity>
+           <InitialQuantity>180</InitialQuantity>
+           <Monitoring>
+               <TrackUtilization>true</TrackUtilization>
+               <PublishMetrics>true</PublishMetrics>
+           </Monitoring>
+       </Resource>
+   </Resources>
+
+   <!-- 任务定义 -->
+   <Tasks>
+       <Task id="task_reconnaissance_mission">
+           <Name>侦察任务</Name>
+           <Goal>侦查前方区域发现敌情并评估打击效果</Goal>
+           <Priority>high</Priority>
+           <Entities>
+               <EntityRef>ent_recon_squad</EntityRef>
+           </Entities>
+           <InitialAction>act_patrol</InitialAction>
+           <Traceable>true</Traceable>
+       </Task>
+   </Tasks>
+
+   <!-- 实体定义 -->
+   <Entities>
+       <!-- 指挥所 -->
+       <Entity id="ent_command_post">
+           <Name>指挥所</Name>
+           <Type>passive</Type>
+           <Position>
+               <X>0.0</X>
+               <Y>0.0</Y>
+           </Position>
+           <Attributes>
+               <Attribute name="unit_type" value="command" type="string"/>
+               <Attribute name="call_sign" value="Eagle" type="string"/>
+           </Attributes>
+           <StateVariables>
+               <StateVariable id="sv_alert_level">
+                   <Name>警戒等级</Name>
+                   <Type>integer</Type>
+                   <InitialValue>1</InitialValue>
+                   <PublishChanges>true</PublishChanges>
+               </StateVariable>
+           </StateVariables>
+           <Actions>
+               <ActionRef>act_process_intel</ActionRef>
+               <ActionRef>act_issue_fire_order</ActionRef>
+               <ActionRef>act_cease_fire_order</ActionRef>
+           </Actions>
+           <Visualization>
+               <Icon>command_post</Icon>
+               <Color>#FFD700</Color>
+               <Size>30.0</Size>
+               <ShowLabel>true</ShowLabel>
+           </Visualization>
+       </Entity>
+
+       <!-- 炮兵营 -->
+       <Entity id="ent_artillery_battalion">
+           <Name>炮兵营</Name>
+           <Type>agent</Type>
+           <Position>
+               <X>-500.0</X>
+               <Y>-200.0</Y>
+           </Position>
+           <Attributes>
+               <Attribute name="unit_type" value="artillery" type="string"/>
+               <Attribute name="call_sign" value="Thunder" type="string"/>
+               <Attribute name="guns_count" value="18" type="integer"/>
+           </Attributes>
+           <StateVariables>
+               <StateVariable id="sv_fire_status">
+                   <Name>射击状态</Name>
+                   <Type>string</Type>
+                   <InitialValue>ready</InitialValue>
+                   <PublishChanges>true</PublishChanges>
+               </StateVariable>
+               <StateVariable id="sv_rounds_fired">
+                   <Name>已发射弹数</Name>
+                   <Type>integer</Type>
+                   <InitialValue>0</InitialValue>
+               </StateVariable>
+           </StateVariables>
+           <Actions>
+               <ActionRef>act_execute_fire_mission</ActionRef>
+               <ActionRef>act_cease_fire</ActionRef>
+           </Actions>
+           <Visualization>
+               <Icon>artillery</Icon>
+               <Color>#8B4513</Color>
+               <Size>25.0</Size>
+               <ShowLabel>true</ShowLabel>
+           </Visualization>
+       </Entity>
+
+       <!-- 步兵侦察班 -->
+       <Entity id="ent_recon_squad">
+           <Name>步兵侦察班</Name>
+           <Type>agent</Type>
+           <Position>
+               <X>100.0</X>
+               <Y>100.0</Y>
+           </Position>
+           <Attributes>
+               <Attribute name="unit_type" value="recon" type="string"/>
+               <Attribute name="call_sign" value="Scout" type="string"/>
+               <Attribute name="squad_size" value="8" type="integer"/>
+           </Attributes>
+           <StateVariables>
+               <StateVariable id="sv_patrol_status">
+                   <Name>巡逻状态</Name>
+                   <Type>string</Type>
+                   <InitialValue>patrolling</InitialValue>
+                   <PublishChanges>true</PublishChanges>
+               </StateVariable>
+               <StateVariable id="sv_enemy_contact">
+                   <Name>敌情接触</Name>
+                   <Type>boolean</Type>
+                   <InitialValue>false</InitialValue>
+                   <PublishChanges>true</PublishChanges>
+               </StateVariable>
+           </StateVariables>
+           <Actions>
+               <ActionRef>act_patrol</ActionRef>
+               <ActionRef>act_report_enemy</ActionRef>
+               <ActionRef>act_assess_damage</ActionRef>
+           </Actions>
+           <Visualization>
+               <Icon>infantry_recon</Icon>
+               <Color>#228B22</Color>
+               <Size>15.0</Size>
+               <ShowLabel>true</ShowLabel>
+               <TrackMovement>true</TrackMovement>
+           </Visualization>
+       </Entity>
+   </Entities>
+
+   <!-- 行动定义 -->
+   <Actions>
+       <!-- 侦察班：巡逻 -->
+       <Action id="act_patrol">
+           <Name>巡逻</Name>
+           <Activities>
+               <ActivityRef>activity_move_patrol</ActivityRef>
+               <ActivityRef>activity_scan_area</ActivityRef>
+           </Activities>
+           <TriggerCondition>
+               <Type>condition</Type>
+               <Expression>
+                   <Formula>self.patrol_status == "patrolling"</Formula>
+               </Expression>
+           </TriggerCondition>
+       </Action>
+
+       <!-- 侦察班：报告敌情 -->
+       <Action id="act_report_enemy">
+           <Name>报告敌情</Name>
+           <Activities>
+               <ActivityRef>activity_gather_intel</ActivityRef>
+               <ActivityRef>activity_send_enemy_report</ActivityRef>
+           </Activities>
+           <TriggerCondition>
+               <Type>condition</Type>
+               <Expression>
+                   <Formula>self.enemy_contact == true</Formula>
+               </Expression>
+           </TriggerCondition>
+       </Action>
+
+       <!-- 侦察班：评估打击效果 -->
+       <Action id="act_assess_damage">
+           <Name>评估毁伤</Name>
+           <Activities>
+               <ActivityRef>activity_observe_impact</ActivityRef>
+               <ActivityRef>activity_report_bda</ActivityRef>
+           </Activities>
+           <TriggerCondition>
+               <Type>event</Type>
+               <Expression>
+                   <Formula>global.StrikeCompleted == true</Formula>
+               </Expression>
+           </TriggerCondition>
+       </Action>
+
+       <!-- 指挥所：处理情报 -->
+       <Action id="act_process_intel">
+           <Name>处理情报</Name>
+           <Activities>
+               <ActivityRef>activity_analyze_report</ActivityRef>
+               <ActivityRef>activity_make_decision</ActivityRef>
+           </Activities>
+       </Action>
+
+       <!-- 指挥所：下达开火命令 -->
+       <Action id="act_issue_fire_order">
+           <Name>下达开火命令</Name>
+           <Activities>
+               <ActivityRef>activity_prepare_fire_order</ActivityRef>
+               <ActivityRef>activity_transmit_order</ActivityRef>
+           </Activities>
+       </Action>
+
+       <!-- 指挥所：下达停火命令 -->
+       <Action id="act_cease_fire_order">
+           <Name>下达停火命令</Name>
+           <Activities>
+               <ActivityRef>activity_evaluate_results</ActivityRef>
+               <ActivityRef>activity_send_cease_fire</ActivityRef>
+           </Activities>
+           <TriggerCondition>
+               <Type>condition</Type>
+               <Expression>
+                   <Formula>global.DamageAssessment >= 0.8</Formula>
+               </Expression>
+           </TriggerCondition>
+       </Action>
+
+       <!-- 炮兵营：执行火力任务 -->
+       <Action id="act_execute_fire_mission">
+           <Name>执行火力任务</Name>
+           <Activities>
+               <ActivityRef>activity_prepare_guns</ActivityRef>
+               <ActivityRef>activity_fire_barrage</ActivityRef>
+           </Activities>
+           <ResourceRequirements>
+               <ResourceRequirement>
+                   <ResourceRef>res_artillery_rounds</ResourceRef>
+                   <Quantity>36</Quantity>
+                   <Priority>1</Priority>
+               </ResourceRequirement>
+           </ResourceRequirements>
+       </Action>
+
+       <!-- 炮兵营：停火 -->
+       <Action id="act_cease_fire">
+           <Name>停止射击</Name>
+           <Activities>
+               <ActivityRef>activity_stop_firing</ActivityRef>
+               <ActivityRef>activity_report_status</ActivityRef>
+           </Activities>
+       </Action>
+   </Actions>
+
+   <!-- 活动定义 -->
+   <Activities>
+       <!-- 巡逻移动 -->
+       <Activity id="activity_move_patrol">
+           <Name>巡逻移动</Name>
+           <Type>internal</Type>
+           <InternalFunction>
+               <FunctionType>calculation</FunctionType>
+               <Expression>
+                   <Formula>new_position = calculate_patrol_route(current_position, time)</Formula>
+               </Expression>
+               <Assignments>
+                   <Assignment>
+                       <Target>self.position</Target>
+                       <Expression>
+                           <Formula>new_position</Formula>
+                       </Expression>
+                   </Assignment>
+               </Assignments>
+           </InternalFunction>
+           <DelayTime>
+               <Distribution>constant</Distribution>
+               <Parameters>
+                   <Parameter name="value">30</Parameter>
+               </Parameters>
+           </DelayTime>
+       </Activity>
+
+       <!-- 扫描区域 -->
+       <Activity id="activity_scan_area">
+           <Name>扫描区域</Name>
+           <Type>internal</Type>
+           <InternalFunction>
+               <FunctionType>decision</FunctionType>
+               <Expression>
+                   <Formula>enemy_detected = random() < 0.3</Formula>
+               </Expression>
+               <Assignments>
+                   <Assignment>
+                       <Target>self.enemy_contact</Target>
+                       <Expression>
+                           <Formula>enemy_detected</Formula>
+                       </Expression>
+                   </Assignment>
+               </Assignments>
+           </InternalFunction>
+           <DelayTime>
+               <Distribution>constant</Distribution>
+               <Parameters>
+                   <Parameter name="value">10</Parameter>
+               </Parameters>
+           </DelayTime>
+       </Activity>
+
+       <!-- 收集情报 -->
+       <Activity id="activity_gather_intel">
+           <Name>收集情报</Name>
+           <Type>internal</Type>
+           <InternalFunction>
+               <FunctionType>calculation</FunctionType>
+               <Expression>
+                   <Formula>enemy_info = {position: (800, 600), strength: "company", type: "mechanized"}</Formula>
+               </Expression>
+           </InternalFunction>
+           <DelayTime>
+               <Distribution>uniform</Distribution>
+               <Parameters>
+                   <Parameter name="min">20</Parameter>
+                   <Parameter name="max">40</Parameter>
+               </Parameters>
+           </DelayTime>
+           <Outputs>
+               <Output name="enemy_info" type="string"/>
+           </Outputs>
+       </Activity>
+
+       <!-- 发送敌情报告 -->
+       <Activity id="activity_send_enemy_report">
+           <Name>发送敌情报告</Name>
+           <Type>internal</Type>
+           <InternalFunction>
+               <FunctionType>assignment</FunctionType>
+               <Assignments>
+                   <Assignment>
+                       <Target>global.EnemyDetected</Target>
+                       <Expression>
+                           <Formula>true</Formula>
+                       </Expression>
+                   </Assignment>
+               </Assignments>
+           </InternalFunction>
+           <DelayTime>
+               <Distribution>constant</Distribution>
+               <Parameters>
+                   <Parameter name="value">5</Parameter>
+               </Parameters>
+           </DelayTime>
+       </Activity>
+
+       <!-- 准备火炮 -->
+       <Activity id="activity_prepare_guns">
+           <Name>准备火炮</Name>
+           <Type>internal</Type>
+           <InternalFunction>
+               <FunctionType>assignment</FunctionType>
+               <Assignments>
+                   <Assignment>
+                       <Target>self.fire_status</Target>
+                       <Expression>
+                           <Formula>"preparing"</Formula>
+                       </Expression>
+                   </Assignment>
+               </Assignments>
+           </InternalFunction>
+           <DelayTime>
+               <Distribution>constant</Distribution>
+               <Parameters>
+                   <Parameter name="value">60</Parameter>
+               </Parameters>
+           </DelayTime>
+       </Activity>
+
+       <!-- 火力齐射 -->
+       <Activity id="activity_fire_barrage">
+           <Name>火力齐射</Name>
+           <Type>internal</Type>
+           <InternalFunction>
+               <FunctionType>calculation</FunctionType>
+               <Expression>
+                   <Formula>rounds_fired = 36</Formula>
+               </Expression>
+               <Assignments>
+                   <Assignment>
+                       <Target>self.fire_status</Target>
+                       <Expression>
+                           <Formula>"firing"</Formula>
+                       </Expression>
+                   </Assignment>
+                   <Assignment>
+                       <Target>self.rounds_fired</Target>
+                       <Expression>
+                           <Formula>self.rounds_fired + rounds_fired</Formula>
+                       </Expression>
+                   </Assignment>
+                   <Assignment>
+                       <Target>global.StrikeCompleted</Target>
+                       <Expression>
+                           <Formula>true</Formula>
+                       </Expression>
+                   </Assignment>
+               </Assignments>
+           </InternalFunction>
+           <DelayTime>
+               <Distribution>constant</Distribution>
+               <Parameters>
+                   <Parameter name="value">120</Parameter>
+               </Parameters>
+           </DelayTime>
+       </Activity>
+
+       <!-- 观察打击效果 -->
+       <Activity id="activity_observe_impact">
+           <Name>观察打击效果</Name>
+           <Type>internal</Type>
+           <InternalFunction>
+               <FunctionType>calculation</FunctionType>
+               <Expression>
+                   <Formula>damage_level = 0.7 + random() * 0.3</Formula>
+               </Expression>
+           </InternalFunction>
+           <DelayTime>
+               <Distribution>constant</Distribution>
+               <Parameters>
+                   <Parameter name="value">60</Parameter>
+               </Parameters>
+           </DelayTime>
+           <Outputs>
+               <Output name="damage_level" type="double"/>
+           </Outputs>
+       </Activity>
+
+       <!-- 报告打击评估 -->
+       <Activity id="activity_report_bda">
+           <Name>报告毁伤评估</Name>
+           <Type>internal</Type>
+           <InternalFunction>
+               <FunctionType>assignment</FunctionType>
+               <Assignments>
+                   <Assignment>
+                       <Target>global.DamageAssessment</Target>
+                       <Expression>
+                           <Formula>damage_level</Formula>
+                       </Expression>
+                   </Assignment>
+               </Assignments>
+           </InternalFunction>
+           <DelayTime>
+               <Distribution>constant</Distribution>
+               <Parameters>
+                   <Parameter name="value">10</Parameter>
+               </Parameters>
+           </DelayTime>
+       </Activity>
+
+       <!-- 分析报告 -->
+       <Activity id="activity_analyze_report">
+           <Name>分析报告</Name>
+           <Type>internal</Type>
+           <InternalFunction>
+               <FunctionType>calculation</FunctionType>
+               <Expression>
+                   <Formula>threat_level = analyze_enemy_info(enemy_info)</Formula>
+               </Expression>
+           </InternalFunction>
+           <DelayTime>
+               <Distribution>constant</Distribution>
+               <Parameters>
+                   <Parameter name="value">30</Parameter>
+               </Parameters>
+           </DelayTime>
+       </Activity>
+
+       <!-- 做出决策 -->
+       <Activity id="activity_make_decision">
+           <Name>做出决策</Name>
+           <Type>internal</Type>
+           <InternalFunction>
+               <FunctionType>decision</FunctionType>
+               <Expression>
+                   <Formula>fire_decision = threat_level > 0.6</Formula>
+               </Expression>
+           </InternalFunction>
+           <DelayTime>
+               <Distribution>constant</Distribution>
+               <Parameters>
+                   <Parameter name="value">20</Parameter>
+               </Parameters>
+           </DelayTime>
+       </Activity>
+
+       <!-- 准备火力命令 -->
+       <Activity id="activity_prepare_fire_order">
+           <Name>准备火力命令</Name>
+           <Type>internal</Type>
+           <InternalFunction>
+               <FunctionType>calculation</FunctionType>
+               <Expression>
+                   <Formula>fire_order = {target: enemy_position, type: "suppression", rounds: 36}</Formula>
+               </Expression>
+           </InternalFunction>
+           <DelayTime>
+               <Distribution>constant</Distribution>
+               <Parameters>
+                   <Parameter name="value">15</Parameter>
+               </Parameters>
+           </DelayTime>
+       </Activity>
+
+       <!-- 传送命令 -->
+       <Activity id="activity_transmit_order">
+           <Name>传送命令</Name>
+           <Type>internal</Type>
+           <InternalFunction>
+               <FunctionType>assignment</FunctionType>
+               <Assignments>
+                   <Assignment>
+                       <Target>interaction.fire_order</Target>
+                       <Expression>
+                           <Formula>fire_order</Formula>
+                       </Expression>
+                   </Assignment>
+               </Assignments>
+           </InternalFunction>
+           <DelayTime>
+               <Distribution>constant</Distribution>
+               <Parameters>
+                   <Parameter name="value">5</Parameter>
+               </Parameters>
+           </DelayTime>
+       </Activity>
+
+       <!-- 评估结果 -->
+       <Activity id="activity_evaluate_results">
+           <Name>评估结果</Name>
+           <Type>internal</Type>
+           <InternalFunction>
+               <FunctionType>decision</FunctionType>
+               <Expression>
+                   <Formula>mission_success = global.DamageAssessment >= 0.8</Formula>
+               </Expression>
+           </InternalFunction>
+           <DelayTime>
+               <Distribution>constant</Distribution>
+               <Parameters>
+                   <Parameter name="value">20</Parameter>
+               </Parameters>
+           </DelayTime>
+       </Activity>
+
+       <!-- 发送停火命令 -->
+       <Activity id="activity_send_cease_fire">
+           <Name>发送停火命令</Name>
+           <Type>internal</Type>
+           <InternalFunction>
+               <FunctionType>assignment</FunctionType>
+               <Assignments>
+                   <Assignment>
+                       <Target>interaction.cease_fire</Target>
+                       <Expression>
+                           <Formula>true</Formula>
+                       </Expression>
+                   </Assignment>
+               </Assignments>
+           </InternalFunction>
+           <DelayTime>
+               <Distribution>constant</Distribution>
+               <Parameters>
+                   <Parameter name="value">5</Parameter>
+               </Parameters>
+           </DelayTime>
+       </Activity>
+
+       <!-- 停止射击 -->
+       <Activity id="activity_stop_firing">
+           <Name>停止射击</Name>
+           <Type>internal</Type>
+           <InternalFunction>
+               <FunctionType>assignment</FunctionType>
+               <Assignments>
+                   <Assignment>
+                       <Target>self.fire_status</Target>
+                       <Expression>
+                           <Formula>"ceased"</Formula>
+                       </Expression>
+                   </Assignment>
+               </Assignments>
+           </InternalFunction>
+           <DelayTime>
+               <Distribution>constant</Distribution>
+               <Parameters>
+                   <Parameter name="value">10</Parameter>
+               </Parameters>
+           </DelayTime>
+       </Activity>
+
+       <!-- 报告状态 -->
+       <Activity id="activity_report_status">
+           <Name>报告状态</Name>
+           <Type>internal</Type>
+           <InternalFunction>
+               <FunctionType>assignment</FunctionType>
+               <Assignments>
+                   <Assignment>
+                       <Target>self.fire_status</Target>
+                       <Expression>
+                           <Formula>"ready"</Formula>
+                       </Expression>
+                   </Assignment>
+               </Assignments>
+           </InternalFunction>
+           <DelayTime>
+               <Distribution>constant</Distribution>
+               <Parameters>
+                   <Parameter name="value">5</Parameter>
+               </Parameters>
+           </DelayTime>
+       </Activity>
+   </Activities>
+
+   <!-- 交互定义 -->
+   <Interactions>
+       <!-- 敌情报告 -->
+       <Interaction id="int_enemy_report">
+           <Name>敌情报告</Name>
+           <Source>ent_recon_squad</Source>
+           <Target>ent_command_post</Target>
+           <Type>async</Type>
+           <Protocol>publish-subscribe</Protocol>
+           <TriggerCondition>
+               <Type>event</Type>
+               <Expression>
+                   <Formula>self.enemy_contact == true</Formula>
+               </Expression>
+           </TriggerCondition>
+           <Inputs>
+               <Input name="enemy_position" type="string"/>
+               <Input name="enemy_strength" type="string"/>
+               <Input name="report_time" type="time"/>
+           </Inputs>
+       </Interaction>
+
+       <!-- 火力命令 -->
+       <Interaction id="int_fire_order">
+           <Name>火力命令</Name>
+           <Source>ent_command_post</Source>
+           <Target>ent_artillery_battalion</Target>
+           <Type>sync</Type>
+           <Protocol>request-reply</Protocol>
+           <Inputs>
+               <Input name="target_position" type="string"/>
+               <Input name="fire_type" type="string"/>
+               <Input name="rounds_count" type="integer"/>
+           </Inputs>
+           <Outputs>
+               <Output name="acknowledgment" type="boolean"/>
+               <Output name="estimated_time" type="time"/>
+           </Outputs>
+       </Interaction>
+
+       <!-- 打击评估报告 -->
+       <Interaction id="int_bda_report">
+           <Name>毁伤评估报告</Name>
+           <Source>ent_recon_squad</Source>
+           <Target>ent_command_post</Target>
+           <Type>async</Type>
+           <Protocol>publish-subscribe</Protocol>
+           <Inputs>
+               <Input name="damage_assessment" type="double"/>
+               <Input name="target_status" type="string"/>
+           </Inputs>
+       </Interaction>
+
+       <!-- 停火命令 -->
+       <Interaction id="int_cease_fire">
+           <Name>停火命令</Name>
+           <Source>ent_command_post</Source>
+           <Target>ent_artillery_battalion</Target>
+           <Type>sync</Type>
+           <Protocol>request-reply</Protocol>
+           <Outputs>
+               <Output name="confirmation" type="boolean"/>
+           </Outputs>
+       </Interaction>
+   </Interactions>
+
+   <!-- 事件定义 -->
+   <Events>
+       <!-- 发现敌情事件 -->
+       <Event id="evt_enemy_detected">
+           <Name>发现敌情</Name>
+           <Type>condition</Type>
+           <TriggerCondition>
+               <Type>condition</Type>
+               <Expression>
+                   <Formula>global.EnemyDetected == true</Formula>
+               </Expression>
+           </TriggerCondition>
+           <Actions>
+               <ActionRef>act_process_intel</ActionRef>
+           </Actions>
+           <Priority>1</Priority>
+       </Event>
+
+       <!-- 任务完成事件 -->
+       <Event id="evt_mission_complete">
+           <Name>任务完成</Name>
+           <Type>condition</Type>
+           <TriggerCondition>
+               <Type>condition</Type>
+               <Expression>
+                   <Formula>global.DamageAssessment >= 0.8</Formula>
+               </Expression>
+           </TriggerCondition>
+           <Actions>
+               <ActionRef>act_cease_fire_order</ActionRef>
+           </Actions>
+       </Event>
+   </Events>
+
+   <!-- 监控器定义 -->
+   <Monitors>
+       <!-- 任务进度监控 -->
+       <Monitor id="mon_mission_progress">
+           <Name>任务进度监控</Name>
+           <Target>global</Target>
+           <Metric>EnemyDetected,StrikeCompleted,DamageAssessment</Metric>
+           <SampleInterval>10</SampleInterval>
+           <StreamOutput>true</StreamOutput>
+       </Monitor>
+
+       <!-- 弹药消耗监控 -->
+       <Monitor id="mon_ammo_usage">
+           <Name>弹药消耗监控</Name>
+           <Target>res_artillery_rounds</Target>
+           <Metric>level,utilization</Metric>
+           <SampleInterval>30</SampleInterval>
+           <StreamOutput>true</StreamOutput>
+       </Monitor>
+   </Monitors>
+
+   <!-- 外部接口定义 -->
+   <ExternalInterfaces>
+       <!-- 状态接口 -->
+       <StateInterface>
+           <StateSnapshot>
+               <IncludeEntities>true</IncludeEntities>
+               <IncludeResources>true</IncludeResources>
+               <IncludeVariables>true</IncludeVariables>
+               <SnapshotInterval>30</SnapshotInterval>
+           </StateSnapshot>
+       </StateInterface>
+
+       <!-- 数据接口 -->
+       <DataInterface>
+           <OutputDataPoints>
+               <DataPoint id="dp_unit_positions">
+                   <Name>单位位置</Name>
+                   <Source>all_entities.position</Source>
+                   <Type>string</Type>
+                   <UpdateFrequency>5</UpdateFrequency>
+               </DataPoint>
+               <DataPoint id="dp_mission_status">
+                   <Name>任务状态</Name>
+                   <Source>global.all</Source>
+                   <Type>string</Type>
+                   <UpdateFrequency>10</UpdateFrequency>
+               </DataPoint>
+           </OutputDataPoints>
+           <UpdateMode>push</UpdateMode>
+       </DataInterface>
+   </ExternalInterfaces>
+
+</EATIModel>
