@@ -1,0 +1,2344 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<eati:EATIModel xmlns:eati="http://xai.eati/model/v2"
+                xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                version="2.0"
+                timestamp="2024-01-16T10:00:00"
+                schemaVersion="2.2">
+
+    <!-- 模型元数据 -->
+    <eati:ModelMetadata>
+        <eati:Name>增强战场仿真模型（修正版）</eati:Name>
+        <eati:Description>基于发现敌情-火力打击-毁伤评估的完整作战流程仿真，修正了交互定义和缺失的组件</eati:Description>
+        <eati:Author>EATI团队</eati:Author>
+        <eati:Version>2.2.1</eati:Version>
+        <eati:Tags>
+            <eati:Tag>军事仿真</eati:Tag>
+            <eati:Tag>火力打击</eati:Tag>
+            <eati:Tag>SimPy</eati:Tag>
+            <eati:Tag>修正版</eati:Tag>
+        </eati:Tags>
+        <eati:Dependencies>
+            <eati:Dependency>
+                <eati:Name>simpy</eati:Name>
+                <eati:Version>4.0.1</eati:Version>
+                <eati:ImportAs>simpy</eati:ImportAs>
+            </eati:Dependency>
+            <eati:Dependency>
+                <eati:Name>numpy</eati:Name>
+                <eati:Version>1.24.0</eati:Version>
+                <eati:ImportAs>np</eati:ImportAs>
+            </eati:Dependency>
+            <eati:Dependency>
+                <eati:Name>random</eati:Name>
+                <eati:ImportAs>random</eati:ImportAs>
+            </eati:Dependency>
+            <eati:Dependency>
+                <eati:Name>logging</eati:Name>
+                <eati:ImportAs>logging</eati:ImportAs>
+            </eati:Dependency>
+        </eati:Dependencies>
+    </eati:ModelMetadata>
+
+    <!-- 代码生成配置 -->
+    <eati:CodeGenerationConfig>
+        <eati:Target>simpy</eati:Target>
+        <eati:OutputFormat>python</eati:OutputFormat>
+        <eati:PackageStructure>true</eati:PackageStructure>
+        <eati:GenerateTests>true</eati:GenerateTests>
+        <eati:GenerateDocumentation>true</eati:GenerateDocumentation>
+        <eati:OptimizationLevel>2</eati:OptimizationLevel>
+    </eati:CodeGenerationConfig>
+
+    <!-- 仿真配置 -->
+    <eati:SimulationConfig>
+        <eati:StartTime>0</eati:StartTime>
+        <eati:EndTime>1800</eati:EndTime>  <!-- 30分钟仿真 -->
+        <eati:RandomSeed>123</eati:RandomSeed>
+        <eati:TimeUnit>second</eati:TimeUnit>
+        <eati:ReplicationCount>1</eati:ReplicationCount>
+        <eati:RunMode>continuous</eati:RunMode>
+        <eati:StepSize>5</eati:StepSize>
+        <eati:RealTimeRatio>5.0</eati:RealTimeRatio>
+        <eati:WarmupTime>60</eati:WarmupTime>
+        <eati:SimPyConfig>
+            <eati:EnableLogging>true</eati:EnableLogging>
+            <eati:LogLevel>INFO</eati:LogLevel>
+            <eati:EnableTracing>true</eati:EnableTracing>
+            <eati:EnableProfiler>false</eati:EnableProfiler>
+        </eati:SimPyConfig>
+    </eati:SimulationConfig>
+
+    <!-- 接口配置 -->
+    <eati:InterfaceConfig enabled="true">
+        <eati:WebSocketConfig enabled="true">
+            <eati:Host>localhost</eati:Host>
+            <eati:Port>8765</eati:Port>
+            <eati:HeartbeatInterval>5</eati:HeartbeatInterval>
+        </eati:WebSocketConfig>
+        <eati:DataExportConfig>
+            <eati:Format>json</eati:Format>
+            <eati:Interval>10</eati:Interval>
+            <eati:BufferSize>500</eati:BufferSize>
+            <eati:Compression>false</eati:Compression>
+        </eati:DataExportConfig>
+    </eati:InterfaceConfig>
+
+    <!-- 全局变量 -->
+    <eati:GlobalVariables>
+        <eati:Variable id="gv_enemy_detected">
+            <eati:Name>EnemyDetected</eati:Name>
+            <eati:Type>boolean</eati:Type>
+            <eati:InitialValue>false</eati:InitialValue>
+            <eati:Description>全局敌情发现状态</eati:Description>
+            <eati:Visibility>external</eati:Visibility>
+            <eati:Writable>true</eati:Writable>
+        </eati:Variable>
+        <eati:Variable id="gv_strike_completed">
+            <eati:Name>StrikeCompleted</eati:Name>
+            <eati:Type>boolean</eati:Type>
+            <eati:InitialValue>false</eati:InitialValue>
+            <eati:Description>火力打击完成状态</eati:Description>
+            <eati:Visibility>external</eati:Visibility>
+        </eati:Variable>
+        <eati:Variable id="gv_damage_assessment">
+            <eati:Name>DamageAssessment</eati:Name>
+            <eati:Type>double</eati:Type>
+            <eati:InitialValue>0.0</eati:InitialValue>
+            <eati:Description>毁伤评估结果</eati:Description>
+            <eati:Visibility>external</eati:Visibility>
+            <eati:ValidationRule>
+                <eati:Formula>value >= 0.0 and value <= 1.0</eati:Formula>
+            </eati:ValidationRule>
+        </eati:Variable>
+        <eati:Variable id="gv_mission_status">
+            <eati:Name>MissionStatus</eati:Name>
+            <eati:Type>string</eati:Type>
+            <eati:InitialValue>initialized</eati:InitialValue>
+            <eati:Description>任务执行状态</eati:Description>
+            <eati:Visibility>external</eati:Visibility>
+        </eati:Variable>
+    </eati:GlobalVariables>
+
+    <!-- 资源定义 -->
+    <eati:Resources>
+        <eati:Resource id="res_artillery_rounds">
+            <eati:Name>AmmunitionSupply</eati:Name>
+            <eati:Type>Container</eati:Type>  <!-- SimPy Container -->
+            <eati:Capacity>200</eati:Capacity>
+            <eati:InitialQuantity>180</eati:InitialQuantity>
+            <eati:QueuePolicy>FIFO</eati:QueuePolicy>
+            <eati:Monitoring>
+                <eati:TrackUtilization>true</eati:TrackUtilization>
+                <eati:TrackQueueLength>true</eati:TrackQueueLength>
+                <eati:PublishMetrics>true</eati:PublishMetrics>
+                <eati:SampleInterval>30</eati:SampleInterval>
+            </eati:Monitoring>
+        </eati:Resource>
+        <eati:Resource id="res_medical_team">
+            <eati:Name>MedicalTeam</eati:Name>
+            <eati:Type>Resource</eati:Type>  <!-- SimPy Resource -->
+            <eati:Capacity>3</eati:Capacity>
+            <eati:QueuePolicy>Priority</eati:QueuePolicy>
+            <eati:Monitoring>
+                <eati:TrackUtilization>true</eati:TrackUtilization>
+                <eati:TrackWaitTime>true</eati:TrackWaitTime>
+                <eati:PublishMetrics>true</eati:PublishMetrics>
+            </eati:Monitoring>
+        </eati:Resource>
+    </eati:Resources>
+
+    <!-- 任务定义 -->
+    <eati:Tasks>
+        <eati:Task id="task_reconnaissance_mission">
+            <eati:Name>ReconnaissanceMission</eati:Name>
+            <eati:Goal>侦查前方区域发现敌情并协调打击行动</eati:Goal>
+            <eati:Priority>high</eati:Priority>
+            <eati:Entities>
+                <eati:EntityRef>ent_recon_squad</eati:EntityRef>
+            </eati:Entities>
+            <eati:InitialAction>act_patrol</eati:InitialAction>
+            <eati:Traceable>true</eati:Traceable>
+            <eati:TaskLifecycle>
+                <eati:StartCondition>
+                    <eati:Formula>true</eati:Formula>  <!-- 立即开始 -->
+                </eati:StartCondition>
+                <eati:CompletionCondition>
+                    <eati:Formula>global.DamageAssessment >= 0.8</eati:Formula>
+                </eati:CompletionCondition>
+                <eati:TimeoutCondition>1800</eati:TimeoutCondition>
+            </eati:TaskLifecycle>
+        </eati:Task>
+    </eati:Tasks>
+
+    <!-- 实体定义 -->
+    <eati:Entities>
+        <!-- 指挥所 -->
+        <eati:Entity id="ent_command_post">
+            <eati:Name>CommandPost</eati:Name>
+            <eati:Type>passive</eati:Type>
+            <eati:Position>
+                <eati:X>0.0</eati:X>
+                <eati:Y>0.0</eati:Y>
+                <eati:Reference>WGS84</eati:Reference>
+            </eati:Position>
+            <eati:Attributes>
+                <eati:Attribute name="unit_type" value="command" type="string"/>
+                <eati:Attribute name="call_sign" value="Eagle" type="string"/>
+                <eati:Attribute name="authority_level" value="3" type="integer"/>
+            </eati:Attributes>
+            <eati:StateVariables>
+                <eati:StateVariable id="sv_alert_level">
+                    <eati:Name>alert_level</eati:Name>
+                    <eati:Type>integer</eati:Type>
+                    <eati:InitialValue>1</eati:InitialValue>
+                    <eati:PublishChanges>true</eati:PublishChanges>
+                    <eati:ValidationRule>
+                        <eati:Formula>value >= 1 and value <= 5</eati:Formula>
+                    </eati:ValidationRule>
+                </eati:StateVariable>
+                <eati:StateVariable id="sv_decisions_made">
+                    <eati:Name>decisions_made</eati:Name>
+                    <eati:Type>integer</eati:Type>
+                    <eati:InitialValue>0</eati:InitialValue>
+                </eati:StateVariable>
+            </eati:StateVariables>
+            <eati:Actions>
+                <eati:ActionRef>act_process_intel</eati:ActionRef>
+                <eati:ActionRef>act_issue_fire_order</eati:ActionRef>
+                <eati:ActionRef>act_cease_fire_order</eati:ActionRef>
+                <eati:ActionRef>act_evaluate_mission</eati:ActionRef>
+            </eati:Actions>
+            <!-- 交互处理器定义 -->
+            <eati:InteractionHandlers>
+                <eati:Handler id="enemy_report_handler">
+                    <eati:InteractionRef>int_enemy_report</eati:InteractionRef>
+                    <eati:Role>target</eati:Role>
+                    <eati:PreCondition>
+                        <eati:Formula>self.alert_level >= 1</eati:Formula>
+                    </eati:PreCondition>
+                    <eati:TargetAction>act_process_intel</eati:TargetAction>
+                    <eati:Priority>1</eati:Priority>
+                </eati:Handler>
+                <eati:Handler id="bda_report_handler">
+                    <eati:InteractionRef>int_bda_report</eati:InteractionRef>
+                    <eati:Role>target</eati:Role>
+                    <eati:TargetAction>act_evaluate_mission</eati:TargetAction>
+                    <eati:Priority>2</eati:Priority>
+                </eati:Handler>
+            </eati:InteractionHandlers>
+            <eati:Visualization>
+                <eati:Icon>command_post</eati:Icon>
+                <eati:Color>#FFD700</eati:Color>
+                <eati:Size>30.0</eati:Size>
+                <eati:ShowLabel>true</eati:ShowLabel>
+            </eati:Visualization>
+        </eati:Entity>
+
+        <!-- 炮兵营 -->
+        <eati:Entity id="ent_artillery_battalion">
+            <eati:Name>ArtilleryBattalion</eati:Name>
+            <eati:Type>agent</eati:Type>
+            <eati:Position>
+                <eati:X>-500.0</eati:X>
+                <eati:Y>-200.0</eati:Y>
+            </eati:Position>
+            <eati:Attributes>
+                <eati:Attribute name="unit_type" value="artillery" type="string"/>
+                <eati:Attribute name="call_sign" value="Thunder" type="string"/>
+                <eati:Attribute name="guns_count" value="18" type="integer"/>
+                <eati:Attribute name="ready_time" value="60" type="integer"/>
+            </eati:Attributes>
+            <eati:StateVariables>
+                <eati:StateVariable id="sv_fire_status">
+                    <eati:Name>fire_status</eati:Name>
+                    <eati:Type>string</eati:Type>
+                    <eati:InitialValue>ready</eati:InitialValue>
+                    <eati:PublishChanges>true</eati:PublishChanges>
+                    <eati:ValidationRule>
+                        <eati:Formula>value in ["ready", "preparing", "firing", "ceased", "maintenance"]</eati:Formula>
+                    </eati:ValidationRule>
+                </eati:StateVariable>
+                <eati:StateVariable id="sv_rounds_fired">
+                    <eati:Name>rounds_fired</eati:Name>
+                    <eati:Type>integer</eati:Type>
+                    <eati:InitialValue>0</eati:InitialValue>
+                </eati:StateVariable>
+                <eati:StateVariable id="sv_target_acquired">
+                    <eati:Name>target_acquired</eati:Name>
+                    <eati:Type>boolean</eati:Type>
+                    <eati:InitialValue>false</eati:InitialValue>
+                </eati:StateVariable>
+            </eati:StateVariables>
+            <eati:Actions>
+                <eati:ActionRef>act_execute_fire_mission</eati:ActionRef>
+                <eati:ActionRef>act_cease_fire</eati:ActionRef>
+                <eati:ActionRef>act_report_status</eati:ActionRef>
+                <eati:ActionRef>act_report_unavailable</eati:ActionRef>
+                <eati:ActionRef>act_report_timeout</eati:ActionRef>
+            </eati:Actions>
+            <!-- 交互处理器定义 -->
+            <eati:InteractionHandlers>
+                <eati:Handler id="fire_order_handler">
+                    <eati:InteractionRef>int_fire_order</eati:InteractionRef>
+                    <eati:Role>target</eati:Role>
+                    <eati:PreCondition>
+                        <eati:Formula>self.fire_status == "ready"</eati:Formula>
+                    </eati:PreCondition>
+                    <eati:TargetAction>act_execute_fire_mission</eati:TargetAction>
+                    <eati:Response>
+                        <eati:ResponseType>immediate</eati:ResponseType>
+                        <eati:ResponseData>
+                            <eati:Parameter name="acknowledgment" type="boolean"/>
+                            <eati:Parameter name="estimated_time" type="time"/>
+                            <eati:Parameter name="available_rounds" type="integer"/>
+                        </eati:ResponseData>
+                    </eati:Response>
+                    <eati:ErrorHandling>
+                        <eati:TimeoutAction>act_report_timeout</eati:TimeoutAction>
+                        <eati:FailureAction>act_report_unavailable</eati:FailureAction>
+                    </eati:ErrorHandling>
+                    <eati:Priority>1</eati:Priority>
+                </eati:Handler>
+                <eati:Handler id="cease_fire_handler">
+                    <eati:InteractionRef>int_cease_fire</eati:InteractionRef>
+                    <eati:Role>target</eati:Role>
+                    <eati:TargetAction>act_cease_fire</eati:TargetAction>
+                    <eati:Response>
+                        <eati:ResponseType>immediate</eati:ResponseType>
+                        <eati:ResponseData>
+                            <eati:Parameter name="confirmation" type="boolean"/>
+                            <eati:Parameter name="rounds_expended" type="integer"/>
+                        </eati:ResponseData>
+                    </eati:Response>
+                    <eati:Priority>0</eati:Priority>  <!-- 最高优先级 -->
+                </eati:Handler>
+            </eati:InteractionHandlers>
+            <eati:Visualization>
+                <eati:Icon>artillery</eati:Icon>
+                <eati:Color>#8B4513</eati:Color>
+                <eati:Size>25.0</eati:Size>
+                <eati:ShowLabel>true</eati:ShowLabel>
+            </eati:Visualization>
+        </eati:Entity>
+
+        <!-- 步兵侦察班 -->
+        <eati:Entity id="ent_recon_squad">
+            <eati:Name>ReconSquad</eati:Name>
+            <eati:Type>agent</eati:Type>
+            <eati:Position>
+                <eati:X>100.0</eati:X>
+                <eati:Y>100.0</eati:Y>
+            </eati:Position>
+            <eati:Attributes>
+                <eati:Attribute name="unit_type" value="recon" type="string"/>
+                <eati:Attribute name="call_sign" value="Scout" type="string"/>
+                <eati:Attribute name="squad_size" value="8" type="integer"/>
+                <eati:Attribute name="detection_range" value="800" type="double"/>
+            </eati:Attributes>
+            <eati:StateVariables>
+                <eati:StateVariable id="sv_patrol_status">
+                    <eati:Name>patrol_status</eati:Name>
+                    <eati:Type>string</eati:Type>
+                    <eati:InitialValue>patrolling</eati:InitialValue>
+                    <eati:PublishChanges>true</eati:PublishChanges>
+                    <eati:ChangeEvents>
+                        <eati:ChangeEvent>
+                            <eati:Condition>
+                                <eati:Formula>new_value == "enemy_contact"</eati:Formula>
+                            </eati:Condition>
+                            <eati:TriggerAction>act_report_enemy</eati:TriggerAction>
+                        </eati:ChangeEvent>
+                    </eati:ChangeEvents>
+                </eati:StateVariable>
+                <eati:StateVariable id="sv_enemy_contact">
+                    <eati:Name>enemy_contact</eati:Name>
+                    <eati:Type>boolean</eati:Type>
+                    <eati:InitialValue>false</eati:InitialValue>
+                    <eati:PublishChanges>true</eati:PublishChanges>
+                </eati:StateVariable>
+                <eati:StateVariable id="sv_position_x">
+                    <eati:Name>current_x</eati:Name>
+                    <eati:Type>double</eati:Type>
+                    <eati:InitialValue>100.0</eati:InitialValue>
+                    <eati:UpdateRule>
+                        <eati:Formula>self.position.x</eati:Formula>
+                    </eati:UpdateRule>
+                </eati:StateVariable>
+            </eati:StateVariables>
+            <eati:Actions>
+                <eati:ActionRef>act_patrol</eati:ActionRef>
+                <eati:ActionRef>act_report_enemy</eati:ActionRef>
+                <eati:ActionRef>act_assess_damage</eati:ActionRef>
+                <eati:ActionRef>act_move_to_position</eati:ActionRef>
+                <eati:ActionRef>act_initialize_patrol</eati:ActionRef>
+                <eati:ActionRef>act_return_to_base</eati:ActionRef>
+            </eati:Actions>
+            <eati:Visualization>
+                <eati:Icon>infantry_recon</eati:Icon>
+                <eati:Color>#228B22</eati:Color>
+                <eati:Size>15.0</eati:Size>
+                <eati:ShowLabel>true</eati:ShowLabel>
+                <eati:TrackMovement>true</eati:TrackMovement>
+            </eati:Visualization>
+            <eati:Lifecycle>
+                <eati:InitializationAction>act_initialize_patrol</eati:InitializationAction>
+                <eati:CleanupAction>act_return_to_base</eati:CleanupAction>
+            </eati:Lifecycle>
+        </eati:Entity>
+    </eati:Entities>
+
+    <!-- 行动定义 -->
+    <eati:Actions>
+        <!-- 侦察班：巡逻 -->
+        <eati:Action id="act_patrol">
+            <eati:Name>Patrol</eati:Name>
+            <eati:Type>normal</eati:Type>
+            <eati:Activities executionMode="sequential">
+                <eati:ActivityRef>activity_move_patrol</eati:ActivityRef>
+                <eati:ActivityRef>activity_scan_area</eati:ActivityRef>
+            </eati:Activities>
+            <eati:TriggerCondition>
+                <eati:Type>condition</eati:Type>
+                <eati:Expression>
+                    <eati:Formula>self.patrol_status == "patrolling"</eati:Formula>
+                </eati:Expression>
+                <eati:Priority>5</eati:Priority>
+            </eati:TriggerCondition>
+            <eati:TerminationConditions>
+                <eati:Condition name="enemy_detected" type="State">
+                    <eati:Expression>
+                        <eati:Formula>self.enemy_contact == true</eati:Formula>
+                    </eati:Expression>
+                </eati:Condition>
+            </eati:TerminationConditions>
+            <eati:Priority>3</eati:Priority>
+            <eati:Timeout>300</eati:Timeout>  <!-- 5分钟巡逻超时 -->
+            <eati:ErrorHandling>
+                <eati:OnTimeout>act_return_to_base</eati:OnTimeout>
+                <eati:RetryPolicy>
+                    <eati:MaxRetries>2</eati:MaxRetries>
+                    <eati:RetryDelay>
+                        <eati:Distribution>constant</eati:Distribution>
+                        <eati:Parameters>
+                            <eati:Parameter name="value">30</eati:Parameter>
+                        </eati:Parameters>
+                    </eati:RetryDelay>
+                </eati:RetryPolicy>
+            </eati:ErrorHandling>
+        </eati:Action>
+
+        <!-- 侦察班：报告敌情 -->
+        <eati:Action id="act_report_enemy">
+            <eati:Name>ReportEnemy</eati:Name>
+            <eati:Activities>
+                <eati:ActivityRef>activity_gather_intel</eati:ActivityRef>
+                <eati:ActivityRef>activity_send_enemy_report</eati:ActivityRef>
+            </eati:Activities>
+            <eati:TriggerCondition>
+                <eati:Type>condition</eati:Type>
+                <eati:Expression>
+                    <eati:Formula>self.enemy_contact == true</eati:Formula>
+                </eati:Expression>
+            </eati:TriggerCondition>
+            <eati:Priority>1</eati:Priority>  <!-- 高优先级 -->
+        </eati:Action>
+
+        <!-- 指挥所：处理情报 -->
+        <eati:Action id="act_process_intel">
+            <eati:Name>ProcessIntelligence</eati:Name>
+            <eati:Activities>
+                <eati:ActivityRef>activity_receive_enemy_report</eati:ActivityRef>
+                <eati:ActivityRef>activity_analyze_report</eati:ActivityRef>
+                <eati:ActivityRef>activity_make_decision</eati:ActivityRef>
+            </eati:Activities>
+            <eati:Outputs>
+                <eati:Output name="threat_assessment" type="double"/>
+                <eati:Output name="fire_decision" type="boolean"/>
+            </eati:Outputs>
+        </eati:Action>
+
+        <!-- 指挥所：下达开火命令 -->
+        <eati:Action id="act_issue_fire_order">
+            <eati:Name>IssueFireOrder</eati:Name>
+            <eati:Activities>
+                <eati:ActivityRef>activity_prepare_fire_order</eati:ActivityRef>
+                <eati:ActivityRef>activity_transmit_order</eati:ActivityRef>
+            </eati:Activities>
+            <eati:StartConditions>
+                <eati:Condition name="decision_made" type="State">
+                    <eati:Expression>
+                        <eati:Formula>context.fire_decision == true</eati:Formula>
+                    </eati:Expression>
+                </eati:Condition>
+            </eati:StartConditions>
+        </eati:Action>
+
+        <!-- 指挥所：下达停火命令 -->
+        <eati:Action id="act_cease_fire_order">
+            <eati:Name>CeaseFireOrder</eati:Name>
+            <eati:Activities>
+                <eati:ActivityRef>activity_prepare_cease_fire</eati:ActivityRef>
+                <eati:ActivityRef>activity_transmit_cease_fire</eati:ActivityRef>
+            </eati:Activities>
+        </eati:Action>
+
+        <!-- 炮兵营：执行火力任务 -->
+        <eati:Action id="act_execute_fire_mission">
+            <eati:Name>ExecuteFireMission</eati:Name>
+            <eati:Activities>
+                <eati:ActivityRef>activity_receive_fire_order</eati:ActivityRef>
+                <eati:ActivityRef>activity_prepare_guns</eati:ActivityRef>
+                <eati:ActivityRef>activity_fire_barrage</eati:ActivityRef>
+                <eati:ActivityRef>activity_report_completion</eati:ActivityRef>
+            </eati:Activities>
+            <eati:ResourceRequirements>
+                <eati:ResourceRequirement>
+                    <eati:ResourceRef>res_artillery_rounds</eati:ResourceRef>
+                    <eati:Quantity>36</eati:Quantity>
+                    <eati:Priority>1</eati:Priority>
+                    <eati:Preemptable>false</eati:Preemptable>
+                </eati:ResourceRequirement>
+            </eati:ResourceRequirements>
+            <eati:StartConditions>
+                <eati:Condition name="fire_ready" type="State">
+                    <eati:Expression>
+                        <eati:Formula>self.fire_status == "ready"</eati:Formula>
+                    </eati:Expression>
+                </eati:Condition>
+            </eati:StartConditions>
+            <eati:Outputs>
+                <eati:Output name="mission_success" type="boolean"/>
+                <eati:Output name="rounds_expended" type="integer"/>
+            </eati:Outputs>
+            <eati:Priority>2</eati:Priority>
+            <eati:Timeout>300</eati:Timeout>  <!-- 5分钟任务超时 -->
+        </eati:Action>
+
+        <!-- 炮兵营：停火 -->
+        <eati:Action id="act_cease_fire">
+            <eati:Name>CeaseFire</eati:Name>
+            <eati:Type>interrupt</eati:Type>  <!-- 中断类型，可以打断其他动作 -->
+            <eati:Activities>
+                <eati:ActivityRef>activity_receive_cease_fire</eati:ActivityRef>
+                <eati:ActivityRef>activity_stop_firing</eati:ActivityRef>
+                <eati:ActivityRef>activity_report_status</eati:ActivityRef>
+            </eati:Activities>
+            <eati:Priority>0</eati:Priority>  <!-- 最高优先级 -->
+        </eati:Action>
+
+        <!-- 侦察班：评估毁伤 -->
+        <eati:Action id="act_assess_damage">
+            <eati:Name>AssessDamage</eati:Name>
+            <eati:Activities>
+                <eati:ActivityRef>activity_observe_impact</eati:ActivityRef>
+                <eati:ActivityRef>activity_report_bda</eati:ActivityRef>
+            </eati:Activities>
+            <eati:TriggerCondition>
+                <eati:Type>event</eati:Type>
+                <eati:Expression>
+                    <eati:Formula>global.StrikeCompleted == true</eati:Formula>
+                </eati:Expression>
+            </eati:TriggerCondition>
+        </eati:Action>
+
+        <!-- 新增：指挥所评估任务 -->
+        <eati:Action id="act_evaluate_mission">
+            <eati:Name>EvaluateMission</eati:Name>
+            <eati:Activities>
+                <eati:ActivityRef>activity_receive_bda_report</eati:ActivityRef>
+                <eati:ActivityRef>activity_analyze_bda</eati:ActivityRef>
+                <eati:ActivityRef>activity_determine_next_step</eati:ActivityRef>
+            </eati:Activities>
+            <eati:Outputs>
+                <eati:Output name="mission_complete" type="boolean"/>
+                <eati:Output name="need_additional_strike" type="boolean"/>
+            </eati:Outputs>
+        </eati:Action>
+
+        <!-- 新增：炮兵营报告状态行动 -->
+        <eati:Action id="act_report_status">
+            <eati:Name>ReportStatus</eati:Name>
+            <eati:Activities>
+                <eati:ActivityRef>activity_compile_status</eati:ActivityRef>
+                <eati:ActivityRef>activity_send_status_report</eati:ActivityRef>
+            </eati:Activities>
+        </eati:Action>
+
+        <!-- 新增：炮兵营不可用报告 -->
+        <eati:Action id="act_report_unavailable">
+            <eati:Name>ReportUnavailable</eati:Name>
+            <eati:Activities>
+                <eati:ActivityRef>activity_send_unavailable_message</eati:ActivityRef>
+            </eati:Activities>
+        </eati:Action>
+
+        <!-- 新增：炮兵营超时报告 -->
+        <eati:Action id="act_report_timeout">
+            <eati:Name>ReportTimeout</eati:Name>
+            <eati:Activities>
+                <eati:ActivityRef>activity_send_timeout_message</eati:ActivityRef>
+            </eati:Activities>
+        </eati:Action>
+
+        <!-- 新增：初始化巡逻行动 -->
+        <eati:Action id="act_initialize_patrol">
+            <eati:Name>InitializePatrol</eati:Name>
+            <eati:Activities>
+                <eati:ActivityRef>activity_setup_patrol_route</eati:ActivityRef>
+                <eati:ActivityRef>activity_equipment_check</eati:ActivityRef>
+            </eati:Activities>
+        </eati:Action>
+
+        <!-- 新增：返回基地行动 -->
+        <eati:Action id="act_return_to_base">
+            <eati:Name>ReturnToBase</eati:Name>
+            <eati:Activities>
+                <eati:ActivityRef>activity_calculate_return_route</eati:ActivityRef>
+                <eati:ActivityRef>activity_move_to_base</eati:ActivityRef>
+            </eati:Activities>
+        </eati:Action>
+
+        <!-- 新增：移动到位置行动 -->
+        <eati:Action id="act_move_to_position">
+            <eati:Name>MoveToPosition</eati:Name>
+            <eati:Activities>
+                <eati:ActivityRef>activity_plan_movement</eati:ActivityRef>
+                <eati:ActivityRef>activity_execute_movement</eati:ActivityRef>
+            </eati:Activities>
+            <eati:Inputs>
+                <eati:Input name="target_position" type="dict"/>
+                <eati:Input name="movement_speed" type="double" default="5.0"/>
+            </eati:Inputs>
+        </eati:Action>
+
+        <!-- 新增：请求补给行动 -->
+        <eati:Action id="act_request_resupply">
+            <eati:Name>RequestResupply</eati:Name>
+            <eati:Activities>
+                <eati:ActivityRef>activity_assess_supply_needs</eati:ActivityRef>
+                <eati:ActivityRef>activity_send_resupply_request</eati:ActivityRef>
+            </eati:Activities>
+        </eati:Action>
+    </eati:Actions>
+
+    <!-- 活动定义 -->
+    <eati:Activities>
+        <!-- 巡逻移动 -->
+        <eati:Activity id="activity_move_patrol">
+            <eati:Name>MovePatrol</eati:Name>
+            <eati:Type>internal</eati:Type>
+            <eati:Description>按预定路线进行巡逻移动</eati:Description>
+            <eati:InternalFunction>
+                <eati:FunctionType>calculation</eati:FunctionType>
+                <eati:Expression>
+                    <eati:Formula>new_position = calculate_patrol_route(self.position, env.now)</eati:Formula>
+                    <eati:Language>python</eati:Language>
+                </eati:Expression>
+                <eati:Assignments>
+                    <eati:Assignment>
+                        <eati:Target>self.position</eati:Target>
+                        <eati:Expression>
+                            <eati:Formula>new_position</eati:Formula>
+                        </eati:Expression>
+                    </eati:Assignment>
+                    <eati:Assignment>
+                        <eati:Target>self.current_x</eati:Target>
+                        <eati:Expression>
+                            <eati:Formula>new_position.x</eati:Formula>
+                        </eati:Expression>
+                    </eati:Assignment>
+                </eati:Assignments>
+            </eati:InternalFunction>
+            <eati:DelayTime>
+                <eati:Distribution>uniform</eati:Distribution>
+                <eati:Parameters>
+                    <eati:Parameter name="min">25</eati:Parameter>
+                    <eati:Parameter name="max">35</eati:Parameter>
+                </eati:Parameters>
+                <eati:TruncationMin>20</eati:TruncationMin>
+                <eati:TruncationMax>40</eati:TruncationMax>
+            </eati:DelayTime>
+            <eati:Outputs>
+                <eati:Output name="new_position" type="dict"/>
+                <eati:Output name="movement_duration" type="time"/>
+            </eati:Outputs>
+            <eati:Performance>
+                <eati:TrackExecutionTime>true</eati:TrackExecutionTime>
+                <eati:CacheResults>false</eati:CacheResults>
+            </eati:Performance>
+        </eati:Activity>
+
+        <!-- 扫描区域 -->
+        <eati:Activity id="activity_scan_area">
+            <eati:Name>ScanArea</eati:Name>
+            <eati:Type>simpy</eati:Type>
+            <eati:Description>扫描周围区域寻找敌情</eati:Description>
+            <eati:SimPyFunction>
+                <eati:FunctionName>scan_for_enemies</eati:FunctionName>
+                <eati:ProcessOperation>timeout</eati:ProcessOperation>
+                <eati:Code>
+                    # 扫描逻辑
+                    scan_duration = 10
+                    yield env.timeout(scan_duration)
+                    
+                    # 30%概率发现敌情
+                    detection_probability = 0.3
+                    enemy_detected = random.random() < detection_probability
+                    
+                    if enemy_detected:
+                        entity.enemy_contact = True
+                        entity.patrol_status = "enemy_contact"
+                        logging.info(f"{entity.name} detected enemy at {env.now}")
+                    
+                    return {"enemy_detected": enemy_detected, "scan_time": scan_duration}
+                </eati:Code>
+            </eati:SimPyFunction>
+            <eati:DelayTime>
+                <eati:Distribution>constant</eati:Distribution>
+                <eati:Parameters>
+                    <eati:Parameter name="value">10</eati:Parameter>
+                </eati:Parameters>
+            </eati:DelayTime>
+            <eati:Outputs>
+                <eati:Output name="enemy_detected" type="boolean"/>
+                <eati:Output name="detection_confidence" type="double"/>
+            </eati:Outputs>
+        </eati:Activity>
+
+        <!-- 收集情报 -->
+        <eati:Activity id="activity_gather_intel">
+            <eati:Name>GatherIntelligence</eati:Name>
+            <eati:Type>internal</eati:Type>
+            <eati:InternalFunction>
+                <eati:FunctionType>calculation</eati:FunctionType>
+                <eati:Expression>
+                    <eati:Formula>enemy_info = {"position": {"x": 800, "y": 600}, "strength": "company", "type": "mechanized", "confidence": 0.85}</eati:Formula>
+                </eati:Expression>
+            </eati:InternalFunction>
+            <eati:DelayTime>
+                <eati:Distribution>triangular</eati:Distribution>
+                <eati:Parameters>
+                    <eati:Parameter name="low">15</eati:Parameter>
+                    <eati:Parameter name="high">45</eati:Parameter>
+                    <eati:Parameter name="mode">25</eati:Parameter>
+                </eati:Parameters>
+            </eati:DelayTime>
+            <eati:Outputs>
+                <eati:Output name="enemy_info" type="dict"/>
+                <eati:Output name="intel_quality" type="double"/>
+            </eati:Outputs>
+        </eati:Activity>
+
+        <!-- 发送敌情报告 -->
+        <eati:Activity id="activity_send_enemy_report">
+            <eati:Name>SendEnemyReport</eati:Name>
+            <eati:Type>internal</eati:Type>
+            <eati:InternalFunction>
+                <eati:FunctionType>assignment</eati:FunctionType>
+                <eati:Assignments>
+                    <eati:Assignment>
+                        <eati:Target>global.EnemyDetected</eati:Target>
+                        <eati:Expression>
+                            <eati:Formula>true</eati:Formula>
+                        </eati:Expression>
+                    </eati:Assignment>
+                    <eati:Assignment>
+                        <eati:Target>interaction.enemy_report</eati:Target>
+                        <eati:Expression>
+                            <eati:Formula>{"source": self.id, "enemy_data": context.enemy_info, "timestamp": env.now}</eati:Formula>
+                        </eati:Expression>
+                    </eati:Assignment>
+                </eati:Assignments>
+            </eati:InternalFunction>
+            <eati:DelayTime>
+                <eati:Distribution>constant</eati:Distribution>
+                <eati:Parameters>
+                    <eati:Parameter name="value">5</eati:Parameter>
+                </eati:Parameters>
+            </eati:DelayTime>
+        </eati:Activity>
+
+        <!-- 新增：接收敌情报告活动 -->
+        <eati:Activity id="activity_receive_enemy_report">
+            <eati:Name>ReceiveEnemyReport</eati:Name>
+            <eati:Type>internal</eati:Type>
+            <eati:Description>接收并处理敌情报告</eati:Description>
+            <eati:InternalFunction>
+                <eati:FunctionType>assignment</eati:FunctionType>
+                <eati:Assignments>
+                    <eati:Assignment>
+                        <eati:Target>context.enemy_report</eati:Target>
+                        <eati:Expression>
+                            <eati:Formula>message</eati:Formula>
+                        </eati:Expression>
+                    </eati:Assignment>
+                    <eati:Assignment>
+                        <eati:Target>context.report_received_time</eati:Target>
+                        <eati:Expression>
+                            <eati:Formula>env.now</eati:Formula>
+                        </eati:Expression>
+                    </eati:Assignment>
+                </eati:Assignments>
+            </eati:InternalFunction>
+            <eati:DelayTime>
+                <eati:Distribution>constant</eati:Distribution>
+                <eati:Parameters>
+                    <eati:Parameter name="value">1</eati:Parameter>
+                </eati:Parameters>
+            </eati:DelayTime>
+        </eati:Activity>
+
+        <!-- 准备火炮 -->
+        <eati:Activity id="activity_prepare_guns">
+            <eati:Name>PrepareGuns</eati:Name>
+            <eati:Type>internal</eati:Type>
+            <eati:InternalFunction>
+                <eati:FunctionType>assignment</eati:FunctionType>
+                <eati:Assignments>
+                    <eati:Assignment>
+                        <eati:Target>self.fire_status</eati:Target>
+                        <eati:Expression>
+                            <eati:Formula>"preparing"</eati:Formula>
+                        </eati:Expression>
+                    </eati:Assignment>
+                    <eati:Assignment>
+                        <eati:Target>self.target_acquired</eati:Target>
+                        <eati:Expression>
+                            <eati:Formula>true</eati:Formula>
+                        </eati:Expression>
+                    </eati:Assignment>
+                </eati:Assignments>
+                <eati:PreConditions>
+                    <eati:Condition name="ready_state" type="State">
+                        <eati:Expression>
+                            <eati:Formula>self.fire_status == "ready"</eati:Formula>
+                        </eati:Expression>
+                    </eati:Condition>
+                </eati:PreConditions>
+            </eati:InternalFunction>
+            <eati:DelayTime>
+                <eati:Distribution>normal</eati:Distribution>
+                <eati:Parameters>
+                    <eati:Parameter name="mu">60</eati:Parameter>
+                    <eati:Parameter name="sigma">10</eati:Parameter>
+                </eati:Parameters>
+                <eati:TruncationMin>30</eati:TruncationMin>
+                <eati:TruncationMax>90</eati:TruncationMax>
+            </eati:DelayTime>
+        </eati:Activity>
+
+        <!-- 火力齐射 -->
+        <eati:Activity id="activity_fire_barrage">
+            <eati:Name>FireBarrage</eati:Name>
+            <eati:Type>external</eati:Type>
+            <eati:ExternalAlgorithm>
+                <eati:Module>combat_algorithms</eati:Module>
+                <eati:FunctionName>execute_artillery_barrage</eati:FunctionName>
+                <eati:ImportStatement>from combat_algorithms import execute_artillery_barrage</eati:ImportStatement>
+                <eati:Parameters>
+                    <eati:Parameter name="gun_count" type="integer" source="self.guns_count"/>
+                    <eati:Parameter name="rounds_per_gun" type="integer" default="2"/>
+                    <eati:Parameter name="target_coordinates" type="dict" source="context.target_position"/>
+                    <eati:Parameter name="ammunition_type" type="string" default="HE"/>
+                </eati:Parameters>
+                <eati:ErrorHandling>log_and_continue</eati:ErrorHandling>
+            </eati:ExternalAlgorithm>
+            <eati:DelayTime>
+                <eati:Distribution>gamma</eati:Distribution>
+                <eati:Parameters>
+                    <eati:Parameter name="shape">2</eati:Parameter>
+                    <eati:Parameter name="scale">60</eati:Parameter>
+                </eati:Parameters>
+            </eati:DelayTime>
+            <eati:Outputs>
+                <eati:Output name="rounds_fired" type="integer"/>
+                <eati:Output name="accuracy_estimate" type="double"/>
+                <eati:Output name="mission_duration" type="time"/>
+            </eati:Outputs>
+            <eati:StartConditions>
+                <eati:Condition name="guns_ready" type="State">
+                    <eati:Expression>
+                        <eati:Formula>self.fire_status == "preparing" and self.target_acquired == true</eati:Formula>
+                    </eati:Expression>
+                </eati:Condition>
+            </eati:StartConditions>
+            <eati:Performance>
+                <eati:TrackExecutionTime>true</eati:TrackExecutionTime>
+                <eati:TrackMemoryUsage>false</eati:TrackMemoryUsage>
+            </eati:Performance>
+        </eati:Activity>
+
+        <!-- 新增：接收火力命令活动 -->
+        <eati:Activity id="activity_receive_fire_order">
+            <eati:Name>ReceiveFireOrder</eati:Name>
+            <eati:Type>internal</eati:Type>
+            <eati:InternalFunction>
+                <eati:FunctionType>assignment</eati:FunctionType>
+                <eati:Assignments>
+                    <eati:Assignment>
+                        <eati:Target>context.fire_order</eati:Target>
+                        <eati:Expression>
+                            <eati:Formula>message</eati:Formula>
+                        </eati:Expression>
+                    </eati:Assignment>
+                    <eati:Assignment>
+                        <eati:Target>context.target_position</eati:Target>
+                        <eati:Expression>
+                            <eati:Formula>message.target_coordinates</eati:Formula>
+                        </eati:Expression>
+                    </eati:Assignment>
+                </eati:Assignments>
+            </eati:InternalFunction>
+            <eati:DelayTime>
+                <eati:Distribution>constant</eati:Distribution>
+                <eati:Parameters>
+                    <eati:Parameter name="value">2</eati:Parameter>
+                </eati:Parameters>
+            </eati:DelayTime>
+        </eati:Activity>
+
+        <!-- 观察打击效果 -->
+        <eati:Activity id="activity_observe_impact">
+            <eati:Name>ObserveImpact</eati:Name>
+            <eati:Type>compound</eati:Type>
+            <eati:SubActivities>
+                <eati:SequenceType>sequential</eati:SequenceType>
+                <eati:ActivityRef>activity_move_to_observation_point</eati:ActivityRef>
+                <eati:ActivityRef>activity_conduct_observation</eati:ActivityRef>
+                <eati:ActivityRef>activity_calculate_damage</eati:ActivityRef>
+            </eati:SubActivities>
+            <eati:Outputs>
+                <eati:Output name="damage_assessment" type="double"/>
+                <eati:Output name="observation_confidence" type="double"/>
+            </eati:Outputs>
+        </eati:Activity>
+
+        <!-- 新增：移动到观察点 -->
+        <eati:Activity id="activity_move_to_observation_point">
+            <eati:Name>MoveToObservationPoint</eati:Name>
+            <eati:Type>internal</eati:Type>
+            <eati:InternalFunction>
+                <eati:FunctionType>calculation</eati:FunctionType>
+                <eati:Expression>
+                    <eati:Formula>observation_point = {"x": 600, "y": 400}</eati:Formula>
+                </eati:Expression>
+                <eati:Assignments>
+                    <eati:Assignment>
+                        <eati:Target>self.position</eati:Target>
+                        <eati:Expression>
+                            <eati:Formula>observation_point</eati:Formula>
+                        </eati:Expression>
+                    </eati:Assignment>
+                </eati:Assignments>
+            </eati:InternalFunction>
+            <eati:DelayTime>
+                <eati:Distribution>uniform</eati:Distribution>
+                <eati:Parameters>
+                    <eati:Parameter name="min">30</eati:Parameter>
+                    <eati:Parameter name="max">60</eati:Parameter>
+                </eati:Parameters>
+            </eati:DelayTime>
+        </eati:Activity>
+
+        <!-- 进行观察 -->
+        <eati:Activity id="activity_conduct_observation">
+            <eati:Name>ConductObservation</eati:Name>
+            <eati:Type>internal</eati:Type>
+            <eati:InternalFunction>
+                <eati:FunctionType>calculation</eati:FunctionType>
+                <eati:Expression>
+                    <eati:Formula>damage_level = 0.6 + random.random() * 0.4</eati:Formula>  <!-- 60%-100%毁伤 -->
+                </eati:Expression>
+                <eati:Assignments>
+                    <eati:Assignment>
+                        <eati:Target>context.damage_level</eati:Target>
+                        <eati:Expression>
+                            <eati:Formula>damage_level</eati:Formula>
+                        </eati:Expression>
+                    </eati:Assignment>
+                </eati:Assignments>
+            </eati:InternalFunction>
+            <eati:DelayTime>
+                <eati:Distribution>constant</eati:Distribution>
+                <eati:Parameters>
+                    <eati:Parameter name="value">45</eati:Parameter>
+                </eati:Parameters>
+            </eati:DelayTime>
+        </eati:Activity>
+
+        <!-- 新增：计算毁伤 -->
+        <eati:Activity id="activity_calculate_damage">
+            <eati:Name>CalculateDamage</eati:Name>
+            <eati:Type>internal</eati:Type>
+            <eati:InternalFunction>
+                <eati:FunctionType>calculation</eati:FunctionType>
+                <eati:Expression>
+                    <eati:Formula>final_damage = min(1.0, context.damage_level * 1.1)</eati:Formula>
+                </eati:Expression>
+                <eati:Assignments>
+                    <eati:Assignment>
+                        <eati:Target>context.final_damage_assessment</eati:Target>
+                        <eati:Expression>
+                            <eati:Formula>final_damage</eati:Formula>
+                        </eati:Expression>
+                    </eati:Assignment>
+                </eati:Assignments>
+            </eati:InternalFunction>
+            <eati:DelayTime>
+                <eati:Distribution>constant</eati:Distribution>
+                <eati:Parameters>
+                    <eati:Parameter name="value">5</eati:Parameter>
+                </eati:Parameters>
+            </eati:DelayTime>
+            <eati:Outputs>
+                <eati:Output name="final_damage" type="double"/>
+            </eati:Outputs>
+        </eati:Activity>
+
+        <!-- 报告毁伤评估 -->
+        <eati:Activity id="activity_report_bda">
+            <eati:Name>ReportBDA</eati:Name>
+            <eati:Type>internal</eati:Type>
+            <eati:InternalFunction>
+                <eati:FunctionType>assignment</eati:FunctionType>
+                <eati:Assignments>
+                    <eati:Assignment>
+                        <eati:Target>global.DamageAssessment</eati:Target>
+                        <eati:Expression>
+                            <eati:Formula>context.final_damage_assessment</eati:Formula>
+                        </eati:Expression>
+                    </eati:Assignment>
+                    <eati:Assignment>
+                        <eati:Target>interaction.bda_report</eati:Target>
+                        <eati:Expression>
+                            <eati:Formula>{"damage_assessment": context.final_damage_assessment, "confidence": 0.8, "timestamp": env.now}</eati:Formula>
+                        </eati:Expression>
+                    </eati:Assignment>
+                </eati:Assignments>
+            </eati:InternalFunction>
+            <eati:DelayTime>
+                <eati:Distribution>constant</eati:Distribution>
+                <eati:Parameters>
+                    <eati:Parameter name="value">10</eati:Parameter>
+                </eati:Parameters>
+            </eati:DelayTime>
+        </eati:Activity>
+
+        <!-- 新增：接收毁伤评估报告 -->
+        <eati:Activity id="activity_receive_bda_report">
+            <eati:Name>ReceiveBDAReport</eati:Name>
+            <eati:Type>internal</eati:Type>
+            <eati:InternalFunction>
+                <eati:FunctionType>assignment</eati:FunctionType>
+                <eati:Assignments>
+                    <eati:Assignment>
+                        <eati:Target>context.bda_report</eati:Target>
+                        <eati:Expression>
+                            <eati:Formula>message</eati:Formula>
+                        </eati:Expression>
+                    </eati:Assignment>
+                </eati:Assignments>
+            </eati:InternalFunction>
+            <eati:DelayTime>
+                <eati:Distribution>constant</eati:Distribution>
+                <eati:Parameters>
+                    <eati:Parameter name="value">1</eati:Parameter>
+                </eati:Parameters>
+            </eati:DelayTime>
+        </eati:Activity>
+
+        <!-- 分析报告 -->
+        <eati:Activity id="activity_analyze_report">
+            <eati:Name>AnalyzeReport</eati:Name>
+            <eati:Type>internal</eati:Type>
+            <eati:InternalFunction>
+                <eati:FunctionType>calculation</eati:FunctionType>
+                <eati:Expression>
+                    <eati:Formula>threat_level = assess_threat(context.enemy_report.enemy_data)</eati:Formula>
+                </eati:Expression>
+                <eati:Assignments>
+                    <eati:Assignment>
+                        <eati:Target>context.threat_assessment</eati:Target>
+                        <eati:Expression>
+                            <eati:Formula>threat_level</eati:Formula>
+                        </eati:Expression>
+                    </eati:Assignment>
+                    <eati:Assignment>
+                        <eati:Target>self.alert_level</eati:Target>
+                        <eati:Expression>
+                            <eati:Formula>min(5, max(2, int(threat_level * 5)))</eati:Formula>
+                        </eati:Expression>
+                    </eati:Assignment>
+                </eati:Assignments>
+            </eati:InternalFunction>
+            <eati:DelayTime>
+                <eati:Distribution>exponential</eati:Distribution>
+                <eati:Parameters>
+                    <eati:Parameter name="rate">0.03</eati:Parameter>  <!-- 平均30秒 -->
+                </eati:Parameters>
+            </eati:DelayTime>
+        </eati:Activity>
+
+        <!-- 做出决策 -->
+        <eati:Activity id="activity_make_decision">
+            <eati:Name>MakeDecision</eati:Name>
+            <eati:Type>interactive</eati:Type>
+            <eati:InteractiveConfig>
+                <eati:RequiresUserInput>false</eati:RequiresUserInput>  <!-- 自动决策 -->
+                <eati:InputTimeout>30</eati:InputTimeout>
+                <eati:DefaultAction>auto_decide</eati:DefaultAction>
+                <eati:UIPrompt>威胁等级: {threat_level:.2f}，是否批准火力打击？</eati:UIPrompt>
+                <eati:InputValidation>
+                    <eati:Formula>response in ["approve", "deny", "delay"]</eati:Formula>
+                </eati:InputValidation>
+            </eati:InteractiveConfig>
+            <eati:InternalFunction>
+                <eati:FunctionType>decision</eati:FunctionType>
+                <eati:Expression>
+                    <eati:Formula>fire_decision = context.threat_assessment > 0.6</eati:Formula>
+                </eati:Expression>
+                <eati:Assignments>
+                    <eati:Assignment>
+                        <eati:Target>context.fire_decision</eati:Target>
+                        <eati:Expression>
+                            <eati:Formula>fire_decision</eati:Formula>
+                        </eati:Expression>
+                    </eati:Assignment>
+                    <eati:Assignment>
+                        <eati:Target>self.decisions_made</eati:Target>
+                        <eati:Expression>
+                            <eati:Formula>self.decisions_made + 1</eati:Formula>
+                        </eati:Expression>
+                    </eati:Assignment>
+                </eati:Assignments>
+            </eati:InternalFunction>
+            <eati:DelayTime>
+                <eati:Distribution>constant</eati:Distribution>
+                <eati:Parameters>
+                    <eati:Parameter name="value">20</eati:Parameter>
+                </eati:Parameters>
+            </eati:DelayTime>
+        </eati:Activity>
+
+        <!-- 准备火力命令 -->
+        <eati:Activity id="activity_prepare_fire_order">
+            <eati:Name>PrepareFireOrder</eati:Name>
+            <eati:Type>internal</eati:Type>
+            <eati:InternalFunction>
+                <eati:FunctionType>calculation</eati:FunctionType>
+                <eati:Expression>
+                    <eati:Formula>fire_order = {"target_position": context.enemy_report.enemy_data.position, "fire_type": "suppression", "rounds_count": 36, "priority": "high"}</eati:Formula>
+                </eati:Expression>
+                <eati:Assignments>
+                    <eati:Assignment>
+                        <eati:Target>context.fire_order</eati:Target>
+                        <eati:Expression>
+                            <eati:Formula>fire_order</eati:Formula>
+                        </eati:Expression>
+                    </eati:Assignment>
+                </eati:Assignments>
+            </eati:InternalFunction>
+            <eati:DelayTime>
+                <eati:Distribution>constant</eati:Distribution>
+                <eati:Parameters>
+                    <eati:Parameter name="value">15</eati:Parameter>
+                </eati:Parameters>
+            </eati:DelayTime>
+        </eati:Activity>
+
+        <!-- 传送命令 -->
+        <eati:Activity id="activity_transmit_order">
+            <eati:Name>TransmitOrder</eati:Name>
+            <eati:Type>internal</eati:Type>
+            <eati:InternalFunction>
+                <eati:FunctionType>assignment</eati:FunctionType>
+                <eati:Assignments>
+                    <eati:Assignment>
+                        <eati:Target>interaction.fire_order</eati:Target>
+                        <eati:Expression>
+                            <eati:Formula>context.fire_order</eati:Formula>
+                        </eati:Expression>
+                    </eati:Assignment>
+                </eati:Assignments>
+            </eati:InternalFunction>
+            <eati:DelayTime>
+                <eati:Distribution>constant</eati:Distribution>
+                <eati:Parameters>
+                    <eati:Parameter name="value">5</eati:Parameter>
+                </eati:Parameters>
+            </eati:DelayTime>
+        </eati:Activity>
+
+        <!-- 报告完成 -->
+        <eati:Activity id="activity_report_completion">
+            <eati:Name>ReportCompletion</eati:Name>
+            <eati:Type>internal</eati:Type>
+            <eati:InternalFunction>
+                <eati:FunctionType>assignment</eati:FunctionType>
+                <eati:Assignments>
+                    <eati:Assignment>
+                        <eati:Target>self.fire_status</eati:Target>
+                        <eati:Expression>
+                            <eati:Formula>"ready"</eati:Formula>
+                        </eati:Expression>
+                    </eati:Assignment>
+                    <eati:Assignment>
+                        <eati:Target>global.StrikeCompleted</eati:Target>
+                        <eati:Expression>
+                            <eati:Formula>true</eati:Formula>
+                        </eati:Expression>
+                    </eati:Assignment>
+                    <eati:Assignment>
+                        <eati:Target>self.rounds_fired</eati:Target>
+                        <eati:Expression>
+                            <eati:Formula>self.rounds_fired + context.rounds_fired</eati:Formula>
+                        </eati:Expression>
+                    </eati:Assignment>
+                </eati:Assignments>
+            </eati:InternalFunction>
+            <eati:DelayTime>
+                <eati:Distribution>constant</eati:Distribution>
+                <eati:Parameters>
+                    <eati:Parameter name="value">5</eati:Parameter>
+                </eati:Parameters>
+            </eati:DelayTime>
+        </eati:Activity>
+
+        <!-- 停止射击 -->
+        <eati:Activity id="activity_stop_firing">
+            <eati:Name>StopFiring</eati:Name>
+            <eati:Type>internal</eati:Type>
+            <eati:InternalFunction>
+                <eati:FunctionType>assignment</eati:FunctionType>
+                <eati:Assignments>
+                    <eati:Assignment>
+                        <eati:Target>self.fire_status</eati:Target>
+                        <eati:Expression>
+                            <eati:Formula>"ceased"</eati:Formula>
+                        </eati:Expression>
+                    </eati:Assignment>
+                </eati:Assignments>
+            </eati:InternalFunction>
+            <eati:DelayTime>
+                <eati:Distribution>constant</eati:Distribution>
+                <eati:Parameters>
+                    <eati:Parameter name="value">10</eati:Parameter>
+                </eati:Parameters>
+            </eati:DelayTime>
+        </eati:Activity>
+
+        <!-- 新增：接收停火命令 -->
+        <eati:Activity id="activity_receive_cease_fire">
+            <eati:Name>ReceiveCeaseFire</eati:Name>
+            <eati:Type>internal</eati:Type>
+            <eati:InternalFunction>
+                <eati:FunctionType>assignment</eati:FunctionType>
+                <eati:Assignments>
+                    <eati:Assignment>
+                        <eati:Target>context.cease_fire_order</eati:Target>
+                        <eati:Expression>
+                            <eati:Formula>message</eati:Formula>
+                        </eati:Expression>
+                    </eati:Assignment>
+                </eati:Assignments>
+            </eati:InternalFunction>
+            <eati:DelayTime>
+                <eati:Distribution>constant</eati:Distribution>
+                <eati:Parameters>
+                    <eati:Parameter name="value">1</eati:Parameter>
+                </eati:Parameters>
+            </eati:DelayTime>
+        </eati:Activity>
+
+        <!-- 报告状态 -->
+        <eati:Activity id="activity_report_status">
+            <eati:Name>ReportStatus</eati:Name>
+            <eati:Type>internal</eati:Type>
+            <eati:InternalFunction>
+                <eati:FunctionType>assignment</eati:FunctionType>
+                <eati:Assignments>
+                    <eati:Assignment>
+                        <eati:Target>self.fire_status</eati:Target>
+                        <eati:Expression>
+                            <eati:Formula>"ready"</eati:Formula>
+                        </eati:Expression>
+                    </eati:Assignment>
+                </eati:Assignments>
+            </eati:InternalFunction>
+            <eati:DelayTime>
+                <eati:Distribution>constant</eati:Distribution>
+                <eati:Parameters>
+                    <eati:Parameter name="value">5</eati:Parameter>
+                </eati:Parameters>
+            </eati:DelayTime>
+        </eati:Activity>
+
+        <!-- 新增：分析毁伤评估 -->
+        <eati:Activity id="activity_analyze_bda">
+            <eati:Name>AnalyzeBDA</eati:Name>
+            <eati:Type>internal</eati:Type>
+            <eati:InternalFunction>
+                <eati:FunctionType>calculation</eati:FunctionType>
+                <eati:Expression>
+                    <eati:Formula>damage_level = context.bda_report.damage_assessment</eati:Formula>
+                </eati:Expression>
+                <eati:Assignments>
+                    <eati:Assignment>
+                        <eati:Target>context.damage_assessment</eati:Target>
+                        <eati:Expression>
+                            <eati:Formula>damage_level</eati:Formula>
+                        </eati:Expression>
+                    </eati:Assignment>
+                </eati:Assignments>
+            </eati:InternalFunction>
+            <eati:DelayTime>
+                <eati:Distribution>constant</eati:Distribution>
+                <eati:Parameters>
+                    <eati:Parameter name="value">10</eati:Parameter>
+                </eati:Parameters>
+            </eati:DelayTime>
+        </eati:Activity>
+
+        <!-- 新增：决定下一步 -->
+        <eati:Activity id="activity_determine_next_step">
+            <eati:Name>DetermineNextStep</eati:Name>
+            <eati:Type>internal</eati:Type>
+            <eati:InternalFunction>
+                <eati:FunctionType>decision</eati:FunctionType>
+                <eati:Expression>
+                    <eati:Formula>mission_complete = context.damage_assessment >= 0.8</eati:Formula>
+                </eati:Expression>
+                <eati:Assignments>
+                    <eati:Assignment>
+                        <eati:Target>context.mission_complete</eati:Target>
+                        <eati:Expression>
+                            <eati:Formula>mission_complete</eati:Formula>
+                        </eati:Expression>
+                    </eati:Assignment>
+                    <eati:Assignment>
+                        <eati:Target>context.need_additional_strike</eati:Target>
+                        <eati:Expression>
+                            <eati:Formula>not mission_complete and context.damage_assessment < 0.6</eati:Formula>
+                        </eati:Expression>
+                    </eati:Assignment>
+                    <eati:Assignment>
+                        <eati:Target>global.MissionStatus</eati:Target>
+                        <eati:Expression>
+                            <eati:Formula>"completed" if mission_complete else "ongoing"</eati:Formula>
+                        </eati:Expression>
+                    </eati:Assignment>
+                </eati:Assignments>
+            </eati:InternalFunction>
+            <eati:DelayTime>
+                <eati:Distribution>constant</eati:Distribution>
+                <eati:Parameters>
+                    <eati:Parameter name="value">5</eati:Parameter>
+                </eati:Parameters>
+            </eati:DelayTime>
+        </eati:Activity>
+
+        <!-- 新增：准备停火命令 -->
+        <eati:Activity id="activity_prepare_cease_fire">
+            <eati:Name>PrepareCeaseFire</eati:Name>
+            <eati:Type>internal</eati:Type>
+            <eati:InternalFunction>
+                <eati:FunctionType>calculation</eati:FunctionType>
+                <eati:Expression>
+                    <eati:Formula>cease_fire_order = {"order_id": generate_order_id(), "timestamp": env.now, "reason": "mission_complete"}</eati:Formula>
+                </eati:Expression>
+                <eati:Assignments>
+                    <eati:Assignment>
+                        <eati:Target>context.cease_fire_order</eati:Target>
+                        <eati:Expression>
+                            <eati:Formula>cease_fire_order</eati:Formula>
+                        </eati:Expression>
+                    </eati:Assignment>
+                </eati:Assignments>
+            </eati:InternalFunction>
+            <eati:DelayTime>
+                <eati:Distribution>constant</eati:Distribution>
+                <eati:Parameters>
+                    <eati:Parameter name="value">5</eati:Parameter>
+                </eati:Parameters>
+            </eati:DelayTime>
+        </eati:Activity>
+
+        <!-- 新增：传送停火命令 -->
+        <eati:Activity id="activity_transmit_cease_fire">
+            <eati:Name>TransmitCeaseFire</eati:Name>
+            <eati:Type>internal</eati:Type>
+            <eati:InternalFunction>
+                <eati:FunctionType>assignment</eati:FunctionType>
+                <eati:Assignments>
+                    <eati:Assignment>
+                        <eati:Target>interaction.cease_fire</eati:Target>
+                        <eati:Expression>
+                            <eati:Formula>context.cease_fire_order</eati:Formula>
+                        </eati:Expression>
+                    </eati:Assignment>
+                </eati:Assignments>
+            </eati:InternalFunction>
+            <eati:DelayTime>
+                <eati:Distribution>constant</eati:Distribution>
+                <eati:Parameters>
+                    <eati:Parameter name="value">2</eati:Parameter>
+                </eati:Parameters>
+            </eati:DelayTime>
+        </eati:Activity>
+
+        <!-- 新增：编译状态 -->
+        <eati:Activity id="activity_compile_status">
+            <eati:Name>CompileStatus</eati:Name>
+            <eati:Type>internal</eati:Type>
+            <eati:InternalFunction>
+                <eati:FunctionType>calculation</eati:FunctionType>
+                <eati:Expression>
+                    <eati:Formula>status_report = {"unit_id": self.id, "status": self.fire_status, "rounds_fired": self.rounds_fired, "ammo_level": res_artillery_rounds.level}</eati:Formula>
+                </eati:Expression>
+                <eati:Assignments>
+                    <eati:Assignment>
+                        <eati:Target>context.status_report</eati:Target>
+                        <eati:Expression>
+                            <eati:Formula>status_report</eati:Formula>
+                        </eati:Expression>
+                    </eati:Assignment>
+                </eati:Assignments>
+            </eati:InternalFunction>
+            <eati:DelayTime>
+                <eati:Distribution>constant</eati:Distribution>
+                <eati:Parameters>
+                    <eati:Parameter name="value">3</eati:Parameter>
+                </eati:Parameters>
+            </eati:DelayTime>
+        </eati:Activity>
+
+        <!-- 新增：发送状态报告 -->
+        <eati:Activity id="activity_send_status_report">
+            <eati:Name>SendStatusReport</eati:Name>
+            <eati:Type>internal</eati:Type>
+            <eati:InternalFunction>
+                <eati:FunctionType>assignment</eati:FunctionType>
+                <eati:Assignments>
+                    <eati:Assignment>
+                        <eati:Target>interaction.status_report</eati:Target>
+                        <eati:Expression>
+                            <eati:Formula>context.status_report</eati:Formula>
+                        </eati:Expression>
+                    </eati:Assignment>
+                </eati:Assignments>
+            </eati:InternalFunction>
+            <eati:DelayTime>
+                <eati:Distribution>constant</eati:Distribution>
+                <eati:Parameters>
+                    <eati:Parameter name="value">2</eati:Parameter>
+                </eati:Parameters>
+            </eati:DelayTime>
+        </eati:Activity>
+
+        <!-- 新增：发送不可用消息 -->
+        <eati:Activity id="activity_send_unavailable_message">
+            <eati:Name>SendUnavailableMessage</eati:Name>
+            <eati:Type>internal</eati:Type>
+            <eati:InternalFunction>
+                <eati:FunctionType>assignment</eati:FunctionType>
+                <eati:Assignments>
+                    <eati:Assignment>
+                        <eati:Target>interaction.error_message</eati:Target>
+                        <eati:Expression>
+                            <eati:Formula>{"type": "unavailable", "unit": self.id, "reason": "not_ready", "timestamp": env.now}</eati:Formula>
+                        </eati:Expression>
+                    </eati:Assignment>
+                </eati:Assignments>
+            </eati:InternalFunction>
+            <eati:DelayTime>
+                <eati:Distribution>constant</eati:Distribution>
+                <eati:Parameters>
+                    <eati:Parameter name="value">1</eati:Parameter>
+                </eati:Parameters>
+            </eati:DelayTime>
+        </eati:Activity>
+
+        <!-- 新增：发送超时消息 -->
+        <eati:Activity id="activity_send_timeout_message">
+            <eati:Name>SendTimeoutMessage</eati:Name>
+            <eati:Type>internal</eati:Type>
+            <eati:InternalFunction>
+                <eati:FunctionType>assignment</eati:FunctionType>
+                <eati:Assignments>
+                    <eati:Assignment>
+                        <eati:Target>interaction.error_message</eati:Target>
+                        <eati:Expression>
+                            <eati:Formula>{"type": "timeout", "unit": self.id, "reason": "response_timeout", "timestamp": env.now}</eati:Formula>
+                        </eati:Expression>
+                    </eati:Assignment>
+                </eati:Assignments>
+            </eati:InternalFunction>
+            <eati:DelayTime>
+                <eati:Distribution>constant</eati:Distribution>
+                <eati:Parameters>
+                    <eati:Parameter name="value">1</eati:Parameter>
+                </eati:Parameters>
+            </eati:DelayTime>
+        </eati:Activity>
+
+        <!-- 新增：设置巡逻路线 -->
+        <eati:Activity id="activity_setup_patrol_route">
+            <eati:Name>SetupPatrolRoute</eati:Name>
+            <eati:Type>internal</eati:Type>
+            <eati:InternalFunction>
+                <eati:FunctionType>calculation</eati:FunctionType>
+                <eati:Expression>
+                    <eati:Formula>patrol_route = [{"x": 100, "y": 100}, {"x": 300, "y": 200}, {"x": 500, "y": 300}, {"x": 700, "y": 400}]</eati:Formula>
+                </eati:Expression>
+                <eati:Assignments>
+                    <eati:Assignment>
+                        <eati:Target>context.patrol_route</eati:Target>
+                        <eati:Expression>
+                            <eati:Formula>patrol_route</eati:Formula>
+                        </eati:Expression>
+                    </eati:Assignment>
+                </eati:Assignments>
+            </eati:InternalFunction>
+            <eati:DelayTime>
+                <eati:Distribution>constant</eati:Distribution>
+                <eati:Parameters>
+                    <eati:Parameter name="value">5</eati:Parameter>
+                </eati:Parameters>
+            </eati:DelayTime>
+        </eati:Activity>
+
+        <!-- 新增：装备检查 -->
+        <eati:Activity id="activity_equipment_check">
+            <eati:Name>EquipmentCheck</eati:Name>
+            <eati:Type>internal</eati:Type>
+            <eati:InternalFunction>
+                <eati:FunctionType>assignment</eati:FunctionType>
+                <eati:Assignments>
+                    <eati:Assignment>
+                        <eati:Target>self.patrol_status</eati:Target>
+                        <eati:Expression>
+                            <eati:Formula>"patrolling"</eati:Formula>
+                        </eati:Expression>
+                    </eati:Assignment>
+                </eati:Assignments>
+            </eati:InternalFunction>
+            <eati:DelayTime>
+                <eati:Distribution>constant</eati:Distribution>
+                <eati:Parameters>
+                    <eati:Parameter name="value">10</eati:Parameter>
+                </eati:Parameters>
+            </eati:DelayTime>
+        </eati:Activity>
+
+        <!-- 新增：计算返回路线 -->
+        <eati:Activity id="activity_calculate_return_route">
+            <eati:Name>CalculateReturnRoute</eati:Name>
+            <eati:Type>internal</eati:Type>
+            <eati:InternalFunction>
+                <eati:FunctionType>calculation</eati:FunctionType>
+                <eati:Expression>
+                    <eati:Formula>return_route = {"x": 100, "y": 100}</eati:Formula>
+                </eati:Expression>
+                <eati:Assignments>
+                    <eati:Assignment>
+                        <eati:Target>context.return_position</eati:Target>
+                        <eati:Expression>
+                            <eati:Formula>return_route</eati:Formula>
+                        </eati:Expression>
+                    </eati:Assignment>
+                </eati:Assignments>
+            </eati:InternalFunction>
+            <eati:DelayTime>
+                <eati:Distribution>constant</eati:Distribution>
+                <eati:Parameters>
+                    <eati:Parameter name="value">5</eati:Parameter>
+                </eati:Parameters>
+            </eati:DelayTime>
+        </eati:Activity>
+
+        <!-- 新增：移动到基地 -->
+        <eati:Activity id="activity_move_to_base">
+            <eati:Name>MoveToBase</eati:Name>
+            <eati:Type>internal</eati:Type>
+            <eati:InternalFunction>
+                <eati:FunctionType>assignment</eati:FunctionType>
+                <eati:Assignments>
+                    <eati:Assignment>
+                        <eati:Target>self.position</eati:Target>
+                        <eati:Expression>
+                            <eati:Formula>context.return_position</eati:Formula>
+                        </eati:Expression>
+                    </eati:Assignment>
+                    <eati:Assignment>
+                        <eati:Target>self.patrol_status</eati:Target>
+                        <eati:Expression>
+                            <eati:Formula>"returned"</eati:Formula>
+                        </eati:Expression>
+                    </eati:Assignment>
+                </eati:Assignments>
+            </eati:InternalFunction>
+            <eati:DelayTime>
+                <eati:Distribution>uniform</eati:Distribution>
+                <eati:Parameters>
+                    <eati:Parameter name="min">60</eati:Parameter>
+                    <eati:Parameter name="max">120</eati:Parameter>
+                </eati:Parameters>
+            </eati:DelayTime>
+        </eati:Activity>
+
+        <!-- 新增：计划移动 -->
+        <eati:Activity id="activity_plan_movement">
+            <eati:Name>PlanMovement</eati:Name>
+            <eati:Type>internal</eati:Type>
+            <eati:InternalFunction>
+                <eati:FunctionType>calculation</eati:FunctionType>
+                <eati:Expression>
+                    <eati:Formula>movement_path = calculate_path(self.position, context.target_position)</eati:Formula>
+                </eati:Expression>
+                <eati:Assignments>
+                    <eati:Assignment>
+                        <eati:Target>context.movement_path</eati:Target>
+                        <eati:Expression>
+                            <eati:Formula>movement_path</eati:Formula>
+                        </eati:Expression>
+                    </eati:Assignment>
+                </eati:Assignments>
+            </eati:InternalFunction>
+            <eati:DelayTime>
+                <eati:Distribution>constant</eati:Distribution>
+                <eati:Parameters>
+                    <eati:Parameter name="value">5</eati:Parameter>
+                </eati:Parameters>
+            </eati:DelayTime>
+        </eati:Activity>
+
+        <!-- 新增：执行移动 -->
+        <eati:Activity id="activity_execute_movement">
+            <eati:Name>ExecuteMovement</eati:Name>
+            <eati:Type>internal</eati:Type>
+            <eati:InternalFunction>
+                <eati:FunctionType>assignment</eati:FunctionType>
+                <eati:Assignments>
+                    <eati:Assignment>
+                        <eati:Target>self.position</eati:Target>
+                        <eati:Expression>
+                            <eati:Formula>context.target_position</eati:Formula>
+                        </eati:Expression>
+                    </eati:Assignment>
+                </eati:Assignments>
+            </eati:InternalFunction>
+            <eati:DelayTime>
+                <eati:Distribution>uniform</eati:Distribution>
+                <eati:Parameters>
+                    <eati:Parameter name="min">30</eati:Parameter>
+                    <eati:Parameter name="max">60</eati:Parameter>
+                </eati:Parameters>
+            </eati:DelayTime>
+        </eati:Activity>
+
+        <!-- 新增：评估补给需求 -->
+        <eati:Activity id="activity_assess_supply_needs">
+            <eati:Name>AssessSupplyNeeds</eati:Name>
+            <eati:Type>internal</eati:Type>
+            <eati:InternalFunction>
+                <eati:FunctionType>calculation</eati:FunctionType>
+                <eati:Expression>
+                    <eati:Formula>supply_needs = {"ammo": 200 - res_artillery_rounds.level, "priority": "high"}</eati:Formula>
+                </eati:Expression>
+                <eati:Assignments>
+                    <eati:Assignment>
+                        <eati:Target>context.supply_needs</eati:Target>
+                        <eati:Expression>
+                            <eati:Formula>supply_needs</eati:Formula>
+                        </eati:Expression>
+                    </eati:Assignment>
+                </eati:Assignments>
+            </eati:InternalFunction>
+            <eati:DelayTime>
+                <eati:Distribution>constant</eati:Distribution>
+                <eati:Parameters>
+                    <eati:Parameter name="value">5</eati:Parameter>
+                </eati:Parameters>
+            </eati:DelayTime>
+        </eati:Activity>
+
+        <!-- 新增：发送补给请求 -->
+        <eati:Activity id="activity_send_resupply_request">
+            <eati:Name>SendResupplyRequest</eati:Name>
+            <eati:Type>internal</eati:Type>
+            <eati:InternalFunction>
+                <eati:FunctionType>assignment</eati:FunctionType>
+                <eati:Assignments>
+                    <eati:Assignment>
+                        <eati:Target>interaction.resupply_request</eati:Target>
+                        <eati:Expression>
+                            <eati:Formula>{"unit": self.id, "needs": context.supply_needs, "timestamp": env.now}</eati:Formula>
+                        </eati:Expression>
+                    </eati:Assignment>
+                </eati:Assignments>
+            </eati:InternalFunction>
+            <eati:DelayTime>
+                <eati:Distribution>constant</eati:Distribution>
+                <eati:Parameters>
+                    <eati:Parameter name="value">2</eati:Parameter>
+                </eati:Parameters>
+            </eati:DelayTime>
+        </eati:Activity>
+    </eati:Activities>
+
+    <!-- 交互定义（修正版） -->
+    <eati:Interactions>
+        <!-- 敌情报告交互 -->
+        <eati:Interaction id="int_enemy_report">
+            <eati:Name>EnemyReport</eati:Name>
+            <eati:Description>侦察班向指挥所报告发现的敌情</eati:Description>
+            <eati:Source>ent_recon_squad</eati:Source>
+            <eati:Target>ent_command_post</eati:Target>
+            <eati:SourceActivity>activity_send_enemy_report</eati:SourceActivity>
+            <eati:TargetActivity>activity_receive_enemy_report</eati:TargetActivity>
+            <eati:Type>async</eati:Type>
+            <eati:Protocol>publish-subscribe</eati:Protocol>
+            <eati:MessageFormat>
+                <eati:Format>json</eati:Format>
+                <eati:Encoding>utf-8</eati:Encoding>
+            </eati:MessageFormat>
+            <eati:TriggerCondition>
+                <eati:Type>condition</eati:Type>
+                <eati:Expression>
+                    <eati:Formula>self.enemy_contact == true</eati:Formula>
+                </eati:Expression>
+            </eati:TriggerCondition>
+            <eati:ExecutionSemantics>
+                <eati:SourceBehavior>
+                    <eati:SendTrigger>
+                        <eati:TriggerType>conditional</eati:TriggerType>
+                        <eati:TriggerCondition>
+                            <eati:Formula>self.enemy_contact == true and global.EnemyDetected == true</eati:Formula>
+                        </eati:TriggerCondition>
+                    </eati:SendTrigger>
+                    <eati:MessageConstruction>
+                        <eati:DataMapping>
+                            <eati:Mapping>
+                                <eati:SourceField>context.enemy_info</eati:SourceField>
+                                <eati:TargetField>enemy_data</eati:TargetField>
+                            </eati:Mapping>
+                            <eati:Mapping>
+                                <eati:SourceField>self.position</eati:SourceField>
+                                <eati:TargetField>reporter_position</eati:TargetField>
+                            </eati:Mapping>
+                        </eati:DataMapping>
+                        <eati:MessageValidation>
+                            <eati:Formula>message.enemy_data != null and message.reporter_position != null</eati:Formula>
+                        </eati:MessageValidation>
+                    </eati:MessageConstruction>
+                </eati:SourceBehavior>
+                <eati:TargetBehavior>
+                    <eati:ReceiveConditions>
+                        <eati:AcceptanceCondition>
+                            <eati:Formula>self.alert_level >= 1</eati:Formula>
+                        </eati:AcceptanceCondition>
+                        <eati:FilterCondition>
+                            <eati:Formula>message.enemy_data.confidence > 0.5</eati:Formula>
+                        </eati:FilterCondition>
+                    </eati:ReceiveConditions>
+                    <eati:ProcessingBehavior>
+                        <eati:ProcessingType>immediate</eati:ProcessingType>
+                        <eati:ActionTrigger>
+                            <eati:TriggerMode>direct</eati:TriggerMode>
+                            <eati:TargetAction>act_process_intel</eati:TargetAction>
+                            <eati:ContextData>
+                                <eati:DataItem>
+                                    <eati:Name>enemy_report</eati:Name>
+                                    <eati:Source>message</eati:Source>
+                                </eati:DataItem>
+                                <eati:DataItem>
+                                    <eati:Name>report_source</eati:Name>
+                                    <eati:Source>message.source</eati:Source>
+                                </eati:DataItem>
+                            </eati:ContextData>
+                            <eati:Priority>1</eati:Priority>
+                        </eati:ActionTrigger>
+                        <eati:StateUpdates>
+                            <eati:StateUpdate>
+                                <eati:Target>self.alert_level</eati:Target>
+                                <eati:UpdateExpression>
+                                    <eati:Formula>max(self.alert_level, 3)</eati:Formula>
+                                </eati:UpdateExpression>
+                            </eati:StateUpdate>
+                        </eati:StateUpdates>
+                    </eati:ProcessingBehavior>
+                </eati:TargetBehavior>
+                <eati:DeliveryGuarantee>at-least-once</eati:DeliveryGuarantee>
+                <eati:Ordering>FIFO</eati:Ordering>
+            </eati:ExecutionSemantics>
+            <eati:QualityOfService>
+                <eati:DeliveryReliability>reliable</eati:DeliveryReliability>
+                <eati:MaxDeliveryTime>10</eati:MaxDeliveryTime>
+                <eati:Priority>1</eati:Priority>
+                <eati:Persistence>false</eati:Persistence>
+            </eati:QualityOfService>
+            <eati:Inputs>
+                <eati:Input name="enemy_position" type="dict"/>
+                <eati:Input name="enemy_strength" type="string"/>
+                <eati:Input name="enemy_type" type="string"/>
+                <eati:Input name="confidence" type="double"/>
+                <eati:Input name="report_time" type="time"/>
+            </eati:Inputs>
+            <eati:Traceable>true</eati:Traceable>
+            <eati:ErrorHandling>
+                <eati:DeliveryFailureAction>act_retry_report</eati:DeliveryFailureAction>
+                <eati:ProcessingFailureAction>act_log_error</eati:ProcessingFailureAction>
+                <eati:ErrorLogging>true</eati:ErrorLogging>
+            </eati:ErrorHandling>
+        </eati:Interaction>
+
+        <!-- 火力命令交互 -->
+        <eati:Interaction id="int_fire_order">
+            <eati:Name>FireOrder</eati:Name>
+            <eati:Description>指挥所向炮兵营下达火力打击命令</eati:Description>
+            <eati:Source>ent_command_post</eati:Source>
+            <eati:Target>ent_artillery_battalion</eati:Target>
+            <eati:SourceActivity>activity_transmit_order</eati:SourceActivity>
+            <eati:TargetActivity>activity_receive_fire_order</eati:TargetActivity>
+            <eati:Type>sync</eati:Type>
+            <eati:Protocol>request-reply</eati:Protocol>
+            <eati:MessageFormat>
+                <eati:Format>json</eati:Format>
+                <eati:Schema>fire_order_schema_v1</eati:Schema>
+                <eati:Encoding>utf-8</eati:Encoding>
+            </eati:MessageFormat>
+            <eati:ExecutionSemantics>
+                <eati:SourceBehavior>
+                    <eati:SendTrigger>
+                        <eati:TriggerType>conditional</eati:TriggerType>
+                        <eati:TriggerCondition>
+                            <eati:Formula>context.fire_decision == true</eati:Formula>
+                        </eati:TriggerCondition>
+                    </eati:SendTrigger>
+                    <eati:MessageConstruction>
+                        <eati:DataMapping>
+                            <eati:Mapping>
+                                <eati:SourceField>context.fire_order.target_position</eati:SourceField>
+                                <eati:TargetField>target_coordinates</eati:TargetField>
+                            </eati:Mapping>
+                            <eati:Mapping>
+                                <eati:SourceField>context.fire_order.fire_type</eati:SourceField>
+                                <eati:TargetField>mission_type</eati:TargetField>
+                            </eati:Mapping>
+                            <eati:Mapping>
+                                <eati:SourceField>context.fire_order.rounds_count</eati:SourceField>
+                                <eati:TargetField>ammunition_count</eati:TargetField>
+                            </eati:Mapping>
+                        </eati:DataMapping>
+                        <eati:MessageTemplate>
+                            {
+                                "order_id": "{order_id}",
+                                "target_coordinates": "{target_coordinates}",
+                                "mission_type": "{mission_type}",
+                                "ammunition_count": {ammunition_count},
+                                "priority": "high",
+                                "timestamp": "{timestamp}"
+                            }
+                        </eati:MessageTemplate>
+                    </eati:MessageConstruction>
+                    <eati:ResponseHandling>
+                        <eati:ExpectedResponse>true</eati:ExpectedResponse>
+                        <eati:ResponseTimeout>30</eati:ResponseTimeout>
+                        <eati:ResponseAction>act_process_fire_response</eati:ResponseAction>
+                    </eati:ResponseHandling>
+                    <eati:TimeoutBehavior>
+                        <eati:TimeoutDuration>60</eati:TimeoutDuration>
+                        <eati:TimeoutAction>act_escalate_fire_order</eati:TimeoutAction>
+                        <eati:RetryPolicy>
+                            <eati:MaxRetries>2</eati:MaxRetries>
+                            <eati:RetryDelay>
+                                <eati:Distribution>constant</eati:Distribution>
+                                <eati:Parameters>
+                                    <eati:Parameter name="value">15</eati:Parameter>
+                                </eati:Parameters>
+                            </eati:RetryDelay>
+                        </eati:RetryPolicy>
+                    </eati:TimeoutBehavior>
+                </eati:SourceBehavior>
+                <eati:TargetBehavior>
+                    <eati:ReceiveConditions>
+                        <eati:AcceptanceCondition>
+                            <eati:Formula>self.fire_status in ["ready", "preparing"]</eati:Formula>
+                        </eati:AcceptanceCondition>
+                        <eati:QueueBehavior>queue</eati:QueueBehavior>
+                    </eati:ReceiveConditions>
+                    <eati:ProcessingBehavior>
+                        <eati:ProcessingType>conditional</eati:ProcessingType>
+                        <eati:ProcessingCondition>
+                            <eati:Formula>self.fire_status == "ready" and res_artillery_rounds.level >= message.ammunition_count</eati:Formula>
+                        </eati:ProcessingCondition>
+                        <eati:ActionTrigger>
+                            <eati:TriggerMode>conditional</eati:TriggerMode>
+                            <eati:TargetAction>act_execute_fire_mission</eati:TargetAction>
+                            <eati:TriggerCondition>
+                                <eati:Formula>self.fire_status == "ready"</eati:Formula>
+                            </eati:TriggerCondition>
+                            <eati:ContextData>
+                                <eati:DataItem>
+                                    <eati:Name>fire_order</eati:Name>
+                                    <eati:Source>message</eati:Source>
+                                </eati:DataItem>
+                                <eati:DataItem>
+                                    <eati:Name>order_id</eati:Name>
+                                    <eati:Source>message.order_id</eati:Source>
+                                </eati:DataItem>
+                                <eati:DataItem>
+                                    <eati:Name>target_position</eati:Name>
+                                    <eati:Source>message.target_coordinates</eati:Source>
+                                </eati:DataItem>
+                            </eati:ContextData>
+                            <eati:Priority>1</eati:Priority>
+                        </eati:ActionTrigger>
+                        <eati:StateUpdates>
+                            <eati:StateUpdate>
+                                <eati:Target>self.target_acquired</eati:Target>
+                                <eati:UpdateExpression>
+                                    <eati:Formula>true</eati:Formula>
+                                </eati:UpdateExpression>
+                                <eati:UpdateCondition>
+                                    <eati:Formula>message.target_coordinates != null</eati:Formula>
+                                </eati:UpdateCondition>
+                            </eati:StateUpdate>
+                        </eati:StateUpdates>
+                    </eati:ProcessingBehavior>
+                    <eati:ResponseGeneration>
+                        <eati:GenerateResponse>true</eati:GenerateResponse>
+                        <eati:ResponseDelay>
+                            <eati:Distribution>constant</eati:Distribution>
+                            <eati:Parameters>
+                                <eati:Parameter name="value">2</eati:Parameter>
+                            </eati:Parameters>
+                        </eati:ResponseDelay>
+                        <eati:ResponseData>
+                            <eati:ResponseField>
+                                <eati:Name>acknowledgment</eati:Name>
+                                <eati:ValueExpression>
+                                    <eati:Formula>self.fire_status == "ready" and res_artillery_rounds.level >= message.ammunition_count</eati:Formula>
+                                </eati:ValueExpression>
+                                <eati:Type>boolean</eati:Type>
+                            </eati:ResponseField>
+                            <eati:ResponseField>
+                                <eati:Name>estimated_time</eati:Name>
+                                <eati:ValueExpression>
+                                    <eati:Formula>180 if self.fire_status == "ready" else 0</eati:Formula>
+                                </eati:ValueExpression>
+                                <eati:Type>time</eati:Type>
+                            </eati:ResponseField>
+                            <eati:ResponseField>
+                                <eati:Name>available_rounds</eati:Name>
+                                <eati:ValueExpression>
+                                    <eati:Formula>res_artillery_rounds.level</eati:Formula>
+                                </eati:ValueExpression>
+                                <eati:Type>integer</eati:Type>
+                            </eati:ResponseField>
+                        </eati:ResponseData>
+                        <eati:ResponseCondition>
+                            <eati:Formula>message.order_id != null</eati:Formula>
+                        </eati:ResponseCondition>
+                    </eati:ResponseGeneration>
+                </eati:TargetBehavior>
+                <eati:DeliveryGuarantee>exactly-once</eati:DeliveryGuarantee>
+                <eati:Ordering>total</eati:Ordering>
+            </eati:ExecutionSemantics>
+            <eati:QualityOfService>
+                <eati:DeliveryReliability>reliable</eati:DeliveryReliability>
+                <eati:MaxDeliveryTime>5</eati:MaxDeliveryTime>
+                <eati:Priority>1</eati:Priority>
+                <eati:Persistence>true</eati:Persistence>
+            </eati:QualityOfService>
+            <eati:Inputs>
+                <eati:Input name="target_coordinates" type="dict" validation="has_keys(value, ['x', 'y'])"/>
+                <eati:Input name="fire_type" type="string" default="suppression"/>
+                <eati:Input name="ammunition_count" type="integer" validation="value > 0 and value <= 100"/>
+                <eati:Input name="priority" type="string" default="normal"/>
+                <eati:Input name="order_id" type="string"/>
+            </eati:Inputs>
+            <eati:Outputs>
+                <eati:Output name="acknowledgment" type="boolean"/>
+                <eati:Output name="estimated_time" type="time"/>
+                <eati:Output name="available_rounds" type="integer"/>
+                <eati:Output name="unit_status" type="string"/>
+            </eati:Outputs>
+            <eati:Traceable>true</eati:Traceable>
+            <eati:ErrorHandling>
+                <eati:DeliveryFailureAction>act_escalate_command</eati:DeliveryFailureAction>
+                <eati:ProcessingFailureAction>act_report_artillery_failure</eati:ProcessingFailureAction>
+                <eati:TimeoutAction>act_timeout_fire_order</eati:TimeoutAction>
+                <eati:ErrorLogging>true</eati:ErrorLogging>
+            </eati:ErrorHandling>
+        </eati:Interaction>
+
+        <!-- 毁伤评估报告交互 -->
+        <eati:Interaction id="int_bda_report">
+            <eati:Name>BDAReport</eati:Name>
+            <eati:Description>侦察班向指挥所报告毁伤评估结果</eati:Description>
+            <eati:Source>ent_recon_squad</eati:Source>
+            <eati:Target>ent_command_post</eati:Target>
+            <eati:SourceActivity>activity_report_bda</eati:SourceActivity>
+            <eati:TargetActivity>activity_receive_bda_report</eati:TargetActivity>
+            <eati:Type>async</eati:Type>
+            <eati:Protocol>publish-subscribe</eati:Protocol>
+            <eati:ExecutionSemantics>
+                <eati:SourceBehavior>
+                    <eati:SendTrigger>
+                        <eati:TriggerType>conditional</eati:TriggerType>
+                        <eati:TriggerCondition>
+                            <eati:Formula>context.final_damage_assessment != null and global.StrikeCompleted == true</eati:Formula>
+                        </eati:TriggerCondition>
+                    </eati:SendTrigger>
+                    <eati:MessageConstruction>
+                        <eati:DataMapping>
+                            <eati:Mapping>
+                                <eati:SourceField>context.final_damage_assessment</eati:SourceField>
+                                <eati:TargetField>damage_assessment</eati:TargetField>
+                            </eati:Mapping>
+                            <eati:Mapping>
+                                <eati:SourceField>env.now</eati:SourceField>
+                                <eati:TargetField>assessment_time</eati:TargetField>
+                            </eati:Mapping>
+                        </eati:DataMapping>
+                    </eati:MessageConstruction>
+                </eati:SourceBehavior>
+                <eati:TargetBehavior>
+                    <eati:ProcessingBehavior>
+                        <eati:ProcessingType>immediate</eati:ProcessingType>
+                        <eati:ActionTrigger>
+                            <eati:TriggerMode>direct</eati:TriggerMode>
+                            <eati:TargetAction>act_evaluate_mission</eati:TargetAction>
+                            <eati:ContextData>
+                                <eati:DataItem>
+                                    <eati:Name>bda_report</eati:Name>
+                                    <eati:Source>message</eati:Source>
+                                </eati:DataItem>
+                            </eati:ContextData>
+                        </eati:ActionTrigger>
+                        <eati:StateUpdates>
+                            <eati:StateUpdate>
+                                <eati:Target>global.DamageAssessment</eati:Target>
+                                <eati:UpdateExpression>
+                                    <eati:Formula>message.damage_assessment</eati:Formula>
+                                </eati:UpdateExpression>
+                            </eati:StateUpdate>
+                        </eati:StateUpdates>
+                    </eati:ProcessingBehavior>
+                </eati:TargetBehavior>
+                <eati:DeliveryGuarantee>at-least-once</eati:DeliveryGuarantee>
+            </eati:ExecutionSemantics>
+            <eati:Inputs>
+                <eati:Input name="damage_assessment" type="double" validation="value >= 0.0 and value <= 1.0"/>
+                <eati:Input name="target_status" type="string"/>
+                <eati:Input name="confidence" type="double" default="0.8"/>
+                <eati:Input name="assessment_time" type="time"/>
+            </eati:Inputs>
+            <eati:Traceable>true</eati:Traceable>
+        </eati:Interaction>
+
+        <!-- 停火命令交互 -->
+        <eati:Interaction id="int_cease_fire">
+            <eati:Name>CeaseFire</eati:Name>
+            <eati:Description>指挥所向炮兵营下达停火命令</eati:Description>
+            <eati:Source>ent_command_post</eati:Source>
+            <eati:Target>ent_artillery_battalion</eati:Target>
+            <eati:SourceActivity>activity_transmit_cease_fire</eati:SourceActivity>
+            <eati:TargetActivity>activity_receive_cease_fire</eati:TargetActivity>
+            <eati:Type>sync</eati:Type>
+            <eati:Protocol>request-reply</eati:Protocol>
+            <eati:ExecutionSemantics>
+                <eati:SourceBehavior>
+                    <eati:SendTrigger>
+                        <eati:TriggerType>conditional</eati:TriggerType>
+                        <eati:TriggerCondition>
+                            <eati:Formula>global.DamageAssessment >= 0.8 or mission_timeout</eati:Formula>
+                        </eati:TriggerCondition>
+                    </eati:SendTrigger>
+                    <eati:MessageConstruction>
+                        <eati:DataMapping>
+                            <eati:Mapping>
+                                <eati:SourceField>env.now</eati:SourceField>
+                                <eati:TargetField>cease_fire_time</eati:TargetField>
+                            </eati:Mapping>
+                        </eati:DataMapping>
+                    </eati:MessageConstruction>
+                    <eati:ResponseHandling>
+                        <eati:ExpectedResponse>true</eati:ExpectedResponse>
+                        <eati:ResponseTimeout>15</eati:ResponseTimeout>
+                    </eati:ResponseHandling>
+                </eati:SourceBehavior>
+                <eati:TargetBehavior>
+                    <eati:ProcessingBehavior>
+                        <eati:ProcessingType>immediate</eati:ProcessingType>
+                        <eati:ActionTrigger>
+                            <eati:TriggerMode>direct</eati:TriggerMode>
+                            <eati:TargetAction>act_cease_fire</eati:TargetAction>
+                            <eati:Priority>0</eati:Priority>  <!-- 最高优先级，可中断其他动作 -->
+                        </eati:ActionTrigger>
+                    </eati:ProcessingBehavior>
+                    <eati:ResponseGeneration>
+                        <eati:GenerateResponse>true</eati:GenerateResponse>
+                        <eati:ResponseData>
+                            <eati:ResponseField>
+                                <eati:Name>confirmation</eati:Name>
+                                <eati:ValueExpression>
+                                    <eati:Formula>true</eati:Formula>
+                                </eati:ValueExpression>
+                                <eati:Type>boolean</eati:Type>
+                            </eati:ResponseField>
+                            <eati:ResponseField>
+                                <eati:Name>rounds_expended</eati:Name>
+                                <eati:ValueExpression>
+                                    <eati:Formula>self.rounds_fired</eati:Formula>
+                                </eati:ValueExpression>
+                                <eati:Type>integer</eati:Type>
+                            </eati:ResponseField>
+                        </eati:ResponseData>
+                    </eati:ResponseGeneration>
+                </eati:TargetBehavior>
+                <eati:DeliveryGuarantee>exactly-once</eati:DeliveryGuarantee>
+            </eati:ExecutionSemantics>
+            <eati:QualityOfService>
+                <eati:DeliveryReliability>reliable</eati:DeliveryReliability>
+                <eati:MaxDeliveryTime>2</eati:MaxDeliveryTime>
+                <eati:Priority>0</eati:Priority>  <!-- 最高优先级 -->
+                <eati:Persistence>true</eati:Persistence>
+            </eati:QualityOfService>
+            <eati:Outputs>
+                <eati:Output name="confirmation" type="boolean"/>
+                <eati:Output name="final_status" type="string"/>
+                <eati:Output name="rounds_expended" type="integer"/>
+            </eati:Outputs>
+            <eati:Traceable>true</eati:Traceable>
+        </eati:Interaction>
+    </eati:Interactions>
+
+    <!-- 事件定义 -->
+    <eati:Events>
+        <!-- 发现敌情事件 -->
+        <eati:Event id="evt_enemy_detected">
+            <eati:Name>EnemyDetected</eati:Name>
+            <eati:Description>全局敌情发现事件</eati:Description>
+            <eati:Type>condition</eati:Type>
+            <eati:TriggerCondition>
+                <eati:Type>condition</eati:Type>
+                <eati:Expression>
+                    <eati:Formula>global.EnemyDetected == true</eati:Formula>
+                </eati:Expression>
+            </eati:TriggerCondition>
+            <eati:Actions executionMode="sequential">
+                <eati:ActionRef>act_process_intel</eati:ActionRef>
+            </eati:Actions>
+            <eati:Priority>1</eati:Priority>
+            <eati:Repeatable>false</eati:Repeatable>
+            <eati:EventData>
+                <eati:Parameter name="detection_time" type="time"/>
+                <eati:Parameter name="detection_source" type="string"/>
+            </eati:EventData>
+        </eati:Event>
+
+        <!-- 任务完成事件 -->
+        <eati:Event id="evt_mission_complete">
+            <eati:Name>MissionComplete</eati:Name>
+            <eati:Description>作战任务完成事件</eati:Description>
+            <eati:Type>condition</eati:Type>
+            <eati:TriggerCondition>
+                <eati:Type>condition</eati:Type>
+                <eati:Expression>
+                    <eati:Formula>global.DamageAssessment >= 0.8</eati:Formula>
+                </eati:Expression>
+            </eati:TriggerCondition>
+            <eati:Actions>
+                <eati:ActionRef>act_cease_fire_order</eati:ActionRef>
+            </eati:Actions>
+            <eati:Priority>0</eati:Priority>
+            <eati:Repeatable>false</eati:Repeatable>
+        </eati:Event>
+
+        <!-- 弹药不足预警事件 -->
+        <eati:Event id="evt_ammo_low">
+            <eati:Name>AmmunitionLow</eati:Name>
+            <eati:Description>弹药储备不足预警</eati:Description>
+            <eati:Type>condition</eati:Type>
+            <eati:TriggerCondition>
+                <eati:Type>condition</eati:Type>
+                <eati:Expression>
+                    <eati:Formula>res_artillery_rounds.level < 50</eati:Formula>
+                </eati:Expression>
+            </eati:TriggerCondition>
+            <eati:Actions>
+                <eati:ActionRef>act_request_resupply</eati:ActionRef>
+            </eati:Actions>
+            <eati:Priority>2</eati:Priority>
+            <eati:Repeatable>true</eati:Repeatable>
+            <eati:RepeatCondition>
+                <eati:Formula>res_artillery_rounds.level < 20</eati:Formula>
+            </eati:RepeatCondition>
+        </eati:Event>
+    </eati:Events>
+
+    <!-- 监控器定义 -->
+    <eati:Monitors>
+        <!-- 任务进度监控 -->
+        <eati:Monitor id="mon_mission_progress">
+            <eati:Name>MissionProgressMonitor</eati:Name>
+            <eati:Description>监控整体任务执行进度</eati:Description>
+            <eati:Target>global</eati:Target>
+            <eati:Metric>EnemyDetected,StrikeCompleted,DamageAssessment,MissionStatus</eati:Metric>
+            <eati:SampleInterval>10</eati:SampleInterval>
+            <eati:Aggregation>mean</eati:Aggregation>
+            <eati:WindowSize>60</eati:WindowSize>
+            <eati:OutputFormat>json</eati:OutputFormat>
+            <eati:StreamOutput>true</eati:StreamOutput>
+            <eati:AlertThresholds>
+                <eati:Threshold>
+                    <eati:Level>warning</eati:Level>
+                    <eati:Condition>
+                        <eati:Formula>env.now > 900 and global.EnemyDetected == false</eati:Formula>
+                    </eati:Condition>
+                    <eati:Message>15分钟内未发现敌情</eati:Message>
+                    <eati:Action>act_extend_patrol_area</eati:Action>
+                </eati:Threshold>
+                <eati:Threshold>
+                    <eati:Level>critical</eati:Level>
+                    <eati:Condition>
+                        <eati:Formula>env.now > 1500 and global.DamageAssessment < 0.5</eati:Formula>
+                    </eati:Condition>
+                    <eati:Message>任务效果不佳，需要调整策略</eati:Message>
+                    <eati:CooldownPeriod>300</eati:CooldownPeriod>
+                </eati:Threshold>
+            </eati:AlertThresholds>
+        </eati:Monitor>
+
+        <!-- 弹药消耗监控 -->
+        <eati:Monitor id="mon_ammo_usage">
+            <eati:Name>AmmunitionUsageMonitor</eati:Name>
+            <eati:Description>监控炮弹库存和消耗情况</eati:Description>
+            <eati:Target>res_artillery_rounds</eati:Target>
+            <eati:Metric>level,utilization,queue_length</eati:Metric>
+            <eati:SampleInterval>30</eati:SampleInterval>
+            <eati:Aggregation>sum</eati:Aggregation>
+            <eati:OutputFile>ammo_usage.csv</eati:OutputFile>
+            <eati:StreamOutput>true</eati:StreamOutput>
+            <eati:DataFilters>
+                <eati:Filter>
+                    <eati:Condition>
+                        <eati:Formula>level_change != 0</eati:Formula>
+                    </eati:Condition>
+                    <eati:Action>include</eati:Action>
+                </eati:Filter>
+            </eati:DataFilters>
+            <eati:AlertThresholds>
+                <eati:Threshold>
+                    <eati:Level>warning</eati:Level>
+                    <eati:Condition>
+                        <eati:Formula>level < 100</eati:Formula>
+                    </eati:Condition>
+                    <eati:Message>弹药储备低于50%</eati:Message>
+                </eati:Threshold>
+                <eati:Threshold>
+                    <eati:Level>critical</eati:Level>
+                    <eati:Condition>
+                        <eati:Formula>level < 30</eati:Formula>
+                    </eati:Condition>
+                    <eati:Message>弹药严重不足</eati:Message>
+                    <eati:Action>act_emergency_resupply</eati:Action>
+                </eati:Threshold>
+            </eati:AlertThresholds>
+        </eati:Monitor>
+
+        <!-- 实体状态监控 -->
+        <eati:Monitor id="mon_entity_states">
+            <eati:Name>EntityStateMonitor</eati:Name>
+            <eati:Description>监控所有实体的状态变化</eati:Description>
+            <eati:Target>all_entities</eati:Target>
+            <eati:Metric>state_variables,position,actions</eati:Metric>
+            <eati:SampleInterval>15</eati:SampleInterval>
+            <eati:OutputFormat>json</eati:OutputFormat>
+            <eati:StreamOutput>true</eati:StreamOutput>
+        </eati:Monitor>
+    </eati:Monitors>
+
+    <!-- 外部接口定义 -->
+    <eati:ExternalInterfaces>
+        <!-- 状态接口 -->
+        <eati:StateInterface>
+            <eati:StateSnapshot>
+                <eati:IncludeEntities>true</eati:IncludeEntities>
+                <eati:IncludeResources>true</eati:IncludeResources>
+                <eati:IncludeVariables>true</eati:IncludeVariables>
+                <eati:IncludeQueues>true</eati:IncludeQueues>
+                <eati:SnapshotInterval>30</eati:SnapshotInterval>
+            </eati:StateSnapshot>
+            <eati:StateTransitions>
+                <eati:TrackedTransition>
+                    <eati:Source>ent_recon_squad</eati:Source>
+                    <eati:EventName>enemy_contact_change</eati:EventName>
+                </eati:TrackedTransition>
+                <eati:TrackedTransition>
+                    <eati:Source>ent_artillery_battalion</eati:Source>
+                    <eati:EventName>fire_status_change</eati:EventName>
+                </eati:TrackedTransition>
+            </eati:StateTransitions>
+        </eati:StateInterface>
+
+        <!-- 数据接口 -->
+        <eati:DataInterface>
+            <eati:OutputDataPoints>
+                <eati:DataPoint id="dp_unit_positions">
+                    <eati:Name>UnitPositions</eati:Name>
+                    <eati:Source>all_entities.position</eati:Source>
+                    <eati:Type>string</eati:Type>
+                    <eati:UpdateFrequency>5</eati:UpdateFrequency>
+                </eati:DataPoint>
+                <eati:DataPoint id="dp_mission_status">
+                    <eati:Name>MissionStatus</eati:Name>
+                    <eati:Source>global.all</eati:Source>
+                    <eati:Type>string</eati:Type>
+                    <eati:UpdateFrequency>10</eati:UpdateFrequency>
+                </eati:DataPoint>
+                <eati:DataPoint id="dp_resource_levels">
+                    <eati:Name>ResourceLevels</eati:Name>
+                    <eati:Source>all_resources.level</eati:Source>
+                    <eati:Type>string</eati:Type>
+                    <eati:UpdateFrequency>15</eati:UpdateFrequency>
+                </eati:DataPoint>
+            </eati:OutputDataPoints>
+            <eati:UpdateMode>push</eati:UpdateMode>
+        </eati:DataInterface>
+
+        <!-- 命令接口 -->
+        <eati:CommandInterface>
+            <eati:SupportedCommands>
+                <eati:Command id="cmd_pause_simulation">
+                    <eati:Name>PauseSimulation</eati:Name>
+                    <eati:Description>暂停仿真执行</eati:Description>
+                </eati:Command>
+                <eati:Command id="cmd_resume_simulation">
+                    <eati:Name>ResumeSimulation</eati:Name>
+                    <eati:Description>恢复仿真执行</eati:Description>
+                </eati:Command>
+                <eati:Command id="cmd_change_speed">
+                    <eati:Name>ChangeSimulationSpeed</eati:Name>
+                    <eati:Parameters>
+                        <eati:Parameter name="speed_ratio" type="double" validation="value > 0 and value <= 100"/>
+                    </eati:Parameters>
+                    <eati:Description>改变仿真执行速度</eati:Description>
+                </eati:Command>
+                <eati:Command id="cmd_manual_fire_order">
+                    <eati:Name>ManualFireOrder</eati:Name>
+                    <eati:Parameters>
+                        <eati:Parameter name="target_coordinates" type="dict" validation="has_keys(value, ['x', 'y'])"/>
+                        <eati:Parameter name="rounds_count" type="integer" validation="value > 0 and value <= 50"/>
+                        <eati:Parameter name="priority" type="string" default="normal"/>
+                    </eati:Parameters>
+                    <eati:Description>手动下达火力命令</eati:Description>
+                </eati:Command>
+            </eati:SupportedCommands>
+            <eati:ResponseTimeout>10</eati:ResponseTimeout>
+        </eati:CommandInterface>
+    </eati:ExternalInterfaces>
+
+</eati:EATIModel>
