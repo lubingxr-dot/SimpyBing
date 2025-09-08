@@ -1,0 +1,756 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<eati:EATIModel xmlns:eati="http://xai.eati/model/v2"
+                xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                version="2.0"
+                timestamp="2024-01-16T10:00:00"
+                schemaVersion="2.2.1">
+
+    <!-- 模型元数据 -->
+    <eati:ModelMetadata>
+        <eati:Name>修正交互触发的EATI仿真实例</eati:Name>
+        <eati:Description>修正了interaction触发机制的简化EATI流程仿真，消除重复触发条件</eati:Description>
+        <eati:Author>EATI开发团队</eati:Author>
+        <eati:Version>1.2</eati:Version>
+        <eati:Tags>
+            <eati:Tag>修正版本</eati:Tag>
+            <eati:Tag>单点触发</eati:Tag>
+            <eati:Tag>SimPy</eati:Tag>
+        </eati:Tags>
+        <eati:Dependencies>
+            <eati:Dependency>
+                <eati:Name>simpy</eati:Name>
+                <eati:Version>4.0.1</eati:Version>
+                <eati:ImportAs>simpy</eati:ImportAs>
+            </eati:Dependency>
+            <eati:Dependency>
+                <eati:Name>random</eati:Name>
+                <eati:ImportAs>random</eati:ImportAs>
+            </eati:Dependency>
+        </eati:Dependencies>
+    </eati:ModelMetadata>
+
+    <!-- 代码生成配置 -->
+    <eati:CodeGenerationConfig>
+        <eati:Target>simpy</eati:Target>
+        <eati:OutputFormat>python</eati:OutputFormat>
+        <eati:PackageStructure>false</eati:PackageStructure>
+        <eati:GenerateTests>false</eati:GenerateTests>
+        <eati:GenerateDocumentation>false</eati:GenerateDocumentation>
+        <eati:OptimizationLevel>1</eati:OptimizationLevel>
+    </eati:CodeGenerationConfig>
+
+    <!-- 仿真配置 -->
+    <eati:SimulationConfig>
+        <eati:StartTime>0</eati:StartTime>
+        <eati:EndTime>300</eati:EndTime>
+        <eati:RandomSeed>123</eati:RandomSeed>
+        <eati:TimeUnit>second</eati:TimeUnit>
+        <eati:ReplicationCount>1</eati:ReplicationCount>
+        <eati:RunMode>continuous</eati:RunMode>
+        <eati:RealTimeRatio>1.0</eati:RealTimeRatio>
+        <eati:SimPyConfig>
+            <eati:EnableLogging>true</eati:EnableLogging>
+            <eati:LogLevel>DEBUG</eati:LogLevel>
+            <eati:EnableTracing>true</eati:EnableTracing>
+            <eati:EnableProfiler>false</eati:EnableProfiler>
+        </eati:SimPyConfig>
+    </eati:SimulationConfig>
+
+    <!-- 接口配置 -->
+    <eati:InterfaceConfig enabled="false">
+    </eati:InterfaceConfig>
+
+    <!-- 全局变量 -->
+    <eati:GlobalVariables>
+        <eati:Variable id="gv_target_detected">
+            <eati:Name>TargetDetected</eati:Name>
+            <eati:Type>boolean</eati:Type>
+            <eati:InitialValue>false</eati:InitialValue>
+            <eati:Visibility>external</eati:Visibility>
+        </eati:Variable>
+        <eati:Variable id="gv_action_completed">
+            <eati:Name>ActionCompleted</eati:Name>
+            <eati:Type>boolean</eati:Type>
+            <eati:InitialValue>false</eati:InitialValue>
+            <eati:Visibility>external</eati:Visibility>
+        </eati:Variable>
+        <eati:Variable id="gv_mission_success">
+            <eati:Name>MissionSuccess</eati:Name>
+            <eati:Type>double</eati:Type>
+            <eati:InitialValue>0.0</eati:InitialValue>
+            <eati:Visibility>external</eati:Visibility>
+        </eati:Variable>
+        <eati:Variable id="gv_command_ready">
+           <eati:Name>CommandReady</eati:Name>
+           <eati:Type>boolean</eati:Type>
+           <eati:InitialValue>false</eati:InitialValue>
+           <eati:Visibility>external</eati:Visibility>
+    </eati:Variable>
+    </eati:GlobalVariables>
+
+    <!-- 资源定义 -->
+    <eati:Resources>
+        <eati:Resource id="res_energy">
+            <eati:Name>EnergyResource</eati:Name>
+            <eati:Type>Container</eati:Type>
+            <eati:Capacity>100</eati:Capacity>
+            <eati:InitialQuantity>100</eati:InitialQuantity>
+            <eati:Monitoring>
+                <eati:TrackUtilization>true</eati:TrackUtilization>
+                <eati:PublishMetrics>true</eati:PublishMetrics>
+            </eati:Monitoring>
+        </eati:Resource>
+    </eati:Resources>
+
+    <!-- 任务定义 -->
+    <eati:Tasks>
+        <eati:Task id="task_simple_mission">
+            <eati:Name>SimpleMission</eati:Name>
+            <eati:Goal>执行简单的侦察-决策-行动流程</eati:Goal>
+            <eati:Priority>high</eati:Priority>
+            <eati:Entities>
+                <eati:EntityRef>ent_scout</eati:EntityRef>
+                <eati:EntityRef>ent_commander</eati:EntityRef>
+                <eati:EntityRef>ent_executor</eati:EntityRef>
+            </eati:Entities>
+            <eati:InitialAction>act_start_reconnaissance</eati:InitialAction>
+            <eati:Traceable>true</eati:Traceable>
+            <eati:TaskLifecycle>
+                <eati:CompletionCondition>
+                    <eati:Formula>global.ActionCompleted == true</eati:Formula>
+                </eati:CompletionCondition>
+                <eati:TimeoutCondition>300</eati:TimeoutCondition>
+            </eati:TaskLifecycle>
+        </eati:Task>
+    </eati:Tasks>
+
+    <!-- 实体定义 -->
+    <eati:Entities>
+        <!-- 侦察员 -->
+        <eati:Entity id="ent_scout">
+            <eati:Name>Scout</eati:Name>
+            <eati:Type>agent</eati:Type>
+            <eati:Position>
+                <eati:X>0.0</eati:X>
+                <eati:Y>0.0</eati:Y>
+            </eati:Position>
+            <eati:Attributes>
+                <eati:Attribute name="unit_type" value="scout" type="string"/>
+                <eati:Attribute name="detection_range" value="100" type="integer"/>
+            </eati:Attributes>
+            <eati:StateVariables>
+                <eati:StateVariable id="sv_scout_status">
+                    <eati:Name>scout_status</eati:Name>
+                    <eati:Type>string</eati:Type>
+                    <eati:InitialValue>ready</eati:InitialValue>
+                    <eati:PublishChanges>true</eati:PublishChanges>
+                </eati:StateVariable>
+                <eati:StateVariable id="sv_target_found">
+                    <eati:Name>target_found</eati:Name>
+                    <eati:Type>boolean</eati:Type>
+                    <eati:InitialValue>false</eati:InitialValue>
+                    <eati:PublishChanges>true</eati:PublishChanges>
+                    <eati:ChangeEvents>
+                       <eati:ChangeEvent>
+            <eati:Condition>
+                <eati:Formula>new_value == true and self.report_completed == false</eati:Formula>
+            </eati:Condition>
+            <eati:TriggerAction>act_report_findings</eati:TriggerAction>
+        </eati:ChangeEvent>
+    </eati:ChangeEvents>
+                </eati:StateVariable>
+                <eati:StateVariable id="sv_report_completed">
+                    <eati:Name>report_completed</eati:Name>
+                    <eati:Type>boolean</eati:Type>
+                    <eati:InitialValue>false</eati:InitialValue>
+                </eati:StateVariable>
+            </eati:StateVariables>
+            <eati:Actions>
+                <eati:ActionRef>act_start_reconnaissance</eati:ActionRef>
+                <eati:ActionRef>act_report_findings</eati:ActionRef>
+            </eati:Actions>
+        </eati:Entity>
+
+        <!-- 指挥员 -->
+        <eati:Entity id="ent_commander">
+            <eati:Name>Commander</eati:Name>
+            <eati:Type>agent</eati:Type>
+            <eati:Position>
+                <eati:X>50.0</eati:X>
+                <eati:Y>50.0</eati:Y>
+            </eati:Position>
+            <eati:Attributes>
+                <eati:Attribute name="unit_type" value="command" type="string"/>
+                <eati:Attribute name="authority_level" value="high" type="string"/>
+            </eati:Attributes>
+            <eati:StateVariables>
+                <eati:StateVariable id="sv_decision_made">
+                    <eati:Name>decision_made</eati:Name>
+                    <eati:Type>boolean</eati:Type>
+                    <eati:InitialValue>false</eati:InitialValue>
+                </eati:StateVariable>
+                <eati:StateVariable id="sv_command_status">
+                    <eati:Name>command_status</eati:Name>
+                    <eati:Type>string</eati:Type>
+                    <eati:InitialValue>waiting</eati:InitialValue>
+                </eati:StateVariable>
+                <eati:StateVariable id="sv_received_report">
+                    <eati:Name>received_report</eati:Name>
+                    <eati:Type>boolean</eati:Type>
+                    <eati:InitialValue>false</eati:InitialValue>
+                    <eati:PublishChanges>true</eati:PublishChanges>
+                </eati:StateVariable>
+                <eati:StateVariable id="sv_command_completed">
+                    <eati:Name>command_completed</eati:Name>
+                    <eati:Type>boolean</eati:Type>
+                    <eati:InitialValue>false</eati:InitialValue>
+                </eati:StateVariable>
+            </eati:StateVariables>
+            <eati:Actions>
+                <eati:ActionRef>act_make_decision</eati:ActionRef>
+                <eati:ActionRef>act_issue_command</eati:ActionRef>
+            </eati:Actions>
+        </eati:Entity>
+
+        <!-- 执行员 -->
+        <eati:Entity id="ent_executor">
+            <eati:Name>Executor</eati:Name>
+            <eati:Type>agent</eati:Type>
+            <eati:Position>
+                <eati:X>-50.0</eati:X>
+                <eati:Y>50.0</eati:Y>
+            </eati:Position>
+            <eati:Attributes>
+                <eati:Attribute name="unit_type" value="action" type="string"/>
+                <eati:Attribute name="capability_level" value="standard" type="string"/>
+            </eati:Attributes>
+            <eati:StateVariables>
+                <eati:StateVariable id="sv_action_status">
+                    <eati:Name>action_status</eati:Name>
+                    <eati:Type>string</eati:Type>
+                    <eati:InitialValue>idle</eati:InitialValue>
+                </eati:StateVariable>
+                <eati:StateVariable id="sv_task_completed">
+                    <eati:Name>task_completed</eati:Name>
+                    <eati:Type>boolean</eati:Type>
+                    <eati:InitialValue>false</eati:InitialValue>
+                </eati:StateVariable>
+                <eati:StateVariable id="sv_received_order">
+                    <eati:Name>received_order</eati:Name>
+                    <eati:Type>boolean</eati:Type>
+                    <eati:InitialValue>false</eati:InitialValue>
+                    <eati:PublishChanges>true</eati:PublishChanges>
+                </eati:StateVariable>
+            </eati:StateVariables>
+            <eati:Actions>
+                <eati:ActionRef>act_execute_task</eati:ActionRef>
+            </eati:Actions>
+        </eati:Entity>
+    </eati:Entities>
+
+    <!-- 行动定义 -->
+    <eati:Actions>
+        <!-- 开始侦察 -->
+        <eati:Action id="act_start_reconnaissance">
+            <eati:Name>StartReconnaissance</eati:Name>
+            <eati:Activities executionMode="sequential">
+                <eati:ActivityRef>activity_search_area</eati:ActivityRef>
+                <eati:ActivityRef>activity_detect_target</eati:ActivityRef>
+            </eati:Activities>
+            <eati:Priority>5</eati:Priority>
+        </eati:Action>
+
+        <!-- 报告发现 - 使用单一条件触发 -->
+        <eati:Action id="act_report_findings">
+            <eati:Name>ReportFindings</eati:Name>
+            <eati:Activities executionMode="sequential">
+                <eati:ActivityRef>activity_prepare_report</eati:ActivityRef>
+            </eati:Activities>
+            <eati:Priority>2</eati:Priority>
+        </eati:Action>
+
+        <!-- 做出决策 - 使用单一条件触发 -->
+        <eati:Action id="act_make_decision">
+            <eati:Name>MakeDecision</eati:Name>
+            <eati:Activities executionMode="sequential">
+                <eati:ActivityRef>activity_analyze_situation</eati:ActivityRef>
+            </eati:Activities>
+            <eati:Priority>3</eati:Priority>
+        </eati:Action>
+
+        <!-- 下达命令 - 使用事件evt_command_ready触发 -->
+        <eati:Action id="act_issue_command">
+            <eati:Name>IssueCommand</eati:Name>
+            <eati:Activities executionMode="sequential">
+                <eati:ActivityRef>activity_send_command</eati:ActivityRef>
+            </eati:Activities>
+            <eati:Priority>2</eati:Priority>
+        </eati:Action>
+
+        <!-- 执行任务 - 使用单一条件触发 -->
+        <eati:Action id="act_execute_task">
+            <eati:Name>ExecuteTask</eati:Name>
+            <eati:Activities executionMode="sequential">
+                <eati:ActivityRef>activity_perform_action</eati:ActivityRef>
+            </eati:Activities>
+            <eati:ResourceRequirements>
+                <eati:ResourceRequirement>
+                    <eati:ResourceRef>res_energy</eati:ResourceRef>
+                    <eati:Quantity>30</eati:Quantity>
+                    <eati:Priority>1</eati:Priority>
+                </eati:ResourceRequirement>
+            </eati:ResourceRequirements>
+            <eati:Priority>1</eati:Priority>
+        </eati:Action>
+    </eati:Actions>
+
+    <!-- 活动定义 (6个基础Activity) -->
+    <eati:Activities>
+        <!-- Activity 1: 搜索区域 -->
+        <eati:Activity id="activity_search_area">
+            <eati:Name>SearchArea</eati:Name>
+            <eati:Type>internal</eati:Type>
+            <eati:InternalFunction>
+                <eati:FunctionType>assignment</eati:FunctionType>
+                <eati:Assignments>
+                    <eati:Assignment>
+                        <eati:Target>self.scout_status</eati:Target>
+                        <eati:Expression>
+                            <eati:Formula>"searching"</eati:Formula>
+                        </eati:Expression>
+                    </eati:Assignment>
+                </eati:Assignments>
+            </eati:InternalFunction>
+            <eati:DelayTime>
+                <eati:Distribution>uniform</eati:Distribution>
+                <eati:Parameters>
+                    <eati:Parameter name="min">10</eati:Parameter>
+                    <eati:Parameter name="max">20</eati:Parameter>
+                </eati:Parameters>
+            </eati:DelayTime>
+        </eati:Activity>
+
+        <!-- Activity 2: 检测目标 -->
+        <eati:Activity id="activity_detect_target">
+            <eati:Name>DetectTarget</eati:Name>
+            <eati:Type>internal</eati:Type>
+            <eati:InternalFunction>
+                <eati:FunctionType>decision</eati:FunctionType>
+                <eati:Expression>
+                    <eati:Formula>random.random() < 0.7</eati:Formula>
+                </eati:Expression>
+                <eati:Assignments>
+                    <eati:Assignment>
+                        <eati:Target>self.target_found</eati:Target>
+                        <eati:Expression>
+                            <eati:Formula>random.random() < 0.7</eati:Formula>
+                        </eati:Expression>
+                    </eati:Assignment>
+                    <eati:Assignment>
+                        <eati:Target>global.TargetDetected</eati:Target>
+                        <eati:Expression>
+                            <eati:Formula>self.target_found</eati:Formula>
+                        </eati:Expression>
+                    </eati:Assignment>
+                </eati:Assignments>
+            </eati:InternalFunction>
+            <eati:DelayTime>
+                <eati:Distribution>constant</eati:Distribution>
+                <eati:Parameters>
+                    <eati:Parameter name="value">5</eati:Parameter>
+                </eati:Parameters>
+            </eati:DelayTime>
+            <eati:Outputs>
+                <eati:Output name="target_detected" type="boolean"/>
+            </eati:Outputs>
+        </eati:Activity>
+
+        <!-- Activity 3: 准备报告 - 统一处理状态更新和交互触发 -->
+        <eati:Activity id="activity_prepare_report">
+            <eati:Name>PrepareReport</eati:Name>
+            <eati:Type>internal</eati:Type>
+            <eati:InternalFunction>
+                <eati:FunctionType>assignment</eati:FunctionType>
+                <eati:Assignments>
+                    <eati:Assignment>
+                        <eati:Target>self.scout_status</eati:Target>
+                        <eati:Expression>
+                            <eati:Formula>"reporting"</eati:Formula>
+                        </eati:Expression>
+                    </eati:Assignment>
+                    <!-- 原子操作：状态更新和交互触发 -->
+                    <eati:Assignment>
+                        <eati:Target>self.report_completed</eati:Target>
+                        <eati:Expression>
+                            <eati:Formula>true</eati:Formula>
+                        </eati:Expression>
+                    </eati:Assignment>
+                    <eati:Assignment>
+                        <eati:Target>interaction.int_scout_report</eati:Target>
+                        <eati:Expression>
+                            <eati:Formula>{"target_location": {"x": 200, "y": 150}, "confidence": 0.8, "report_time": env.now}</eati:Formula>
+                        </eati:Expression>
+                    </eati:Assignment>
+                </eati:Assignments>
+            </eati:InternalFunction>
+            <eati:DelayTime>
+                <eati:Distribution>constant</eati:Distribution>
+                <eati:Parameters>
+                    <eati:Parameter name="value">8</eati:Parameter>
+                </eati:Parameters>
+            </eati:DelayTime>
+        </eati:Activity>
+
+        <!-- Activity 4: 分析情况 -->
+        <eati:Activity id="activity_analyze_situation">
+            <eati:Name>AnalyzeSituation</eati:Name>
+            <eati:Type>internal</eati:Type>
+            <eati:InternalFunction>
+                <eati:FunctionType>assignment</eati:FunctionType>
+                <eati:Assignments>
+                    <eati:Assignment>
+                        <eati:Target>self.command_status</eati:Target>
+                        <eati:Expression>
+                            <eati:Formula>"analyzing"</eati:Formula>
+                        </eati:Expression>
+                    </eati:Assignment>
+                    <eati:Assignment>
+                        <eati:Target>self.decision_made</eati:Target>
+                        <eati:Expression>
+                            <eati:Formula>true</eati:Formula>
+                        </eati:Expression>
+                    </eati:Assignment>
+                    <eati:Assignment>
+                        <eati:Target>context.success_probability</eati:Target>
+                        <eati:Expression>
+                            <eati:Formula>0.6 + random.random() * 0.4</eati:Formula>
+                        </eati:Expression>
+                    </eati:Assignment>
+                    <eati:Assignment>
+                        <eati:Target>global.CommandReady</eati:Target>
+                        <eati:Expression>
+                          <eati:Formula>true</eati:Formula>
+                        </eati:Expression>
+                    </eati:Assignment>
+                </eati:Assignments>
+            </eati:InternalFunction>
+            <eati:DelayTime>
+                <eati:Distribution>normal</eati:Distribution>
+                <eati:Parameters>
+                    <eati:Parameter name="mu">15</eati:Parameter>
+                    <eati:Parameter name="sigma">3</eati:Parameter>
+                </eati:Parameters>
+            </eati:DelayTime>
+        </eati:Activity>
+
+        <!-- Activity 5: 发送命令 - 统一处理状态更新和交互触发 -->
+        <eati:Activity id="activity_send_command">
+            <eati:Name>SendCommand</eati:Name>
+            <eati:Type>internal</eati:Type>
+            <eati:InternalFunction>
+                <eati:FunctionType>assignment</eati:FunctionType>
+                <eati:Assignments>
+                    <eati:Assignment>
+                        <eati:Target>self.command_status</eati:Target>
+                        <eati:Expression>
+                            <eati:Formula>"commanding"</eati:Formula>
+                        </eati:Expression>
+                    </eati:Assignment>
+                    <!-- 原子操作：状态更新和交互触发 -->
+                    <eati:Assignment>
+                        <eati:Target>self.command_completed</eati:Target>
+                        <eati:Expression>
+                            <eati:Formula>true</eati:Formula>
+                        </eati:Expression>
+                    </eati:Assignment>
+                    <eati:Assignment>
+                        <eati:Target>interaction.int_command_order</eati:Target>
+                        <eati:Expression>
+                            <eati:Formula>{"action_type": "engage", "priority": "high", "estimated_success": context.success_probability, "order_time": env.now}</eati:Formula>
+                        </eati:Expression>
+                    </eati:Assignment>
+                </eati:Assignments>
+            </eati:InternalFunction>
+            <eati:DelayTime>
+                <eati:Distribution>constant</eati:Distribution>
+                <eati:Parameters>
+                    <eati:Parameter name="value">3</eati:Parameter>
+                </eati:Parameters>
+            </eati:DelayTime>
+        </eati:Activity>
+
+        <!-- Activity 6: 执行行动 -->
+        <eati:Activity id="activity_perform_action">
+            <eati:Name>PerformAction</eati:Name>
+            <eati:Type>internal</eati:Type>
+            <eati:InternalFunction>
+                <eati:FunctionType>assignment</eati:FunctionType>
+                <eati:Assignments>
+                    <eati:Assignment>
+                        <eati:Target>self.action_status</eati:Target>
+                        <eati:Expression>
+                            <eati:Formula>"executing"</eati:Formula>
+                        </eati:Expression>
+                    </eati:Assignment>
+                    <eati:Assignment>
+                        <eati:Target>self.task_completed</eati:Target>
+                        <eati:Expression>
+                            <eati:Formula>true</eati:Formula>
+                        </eati:Expression>
+                    </eati:Assignment>
+                    <eati:Assignment>
+                        <eati:Target>global.ActionCompleted</eati:Target>
+                        <eati:Expression>
+                            <eati:Formula>true</eati:Formula>
+                        </eati:Expression>
+                    </eati:Assignment>
+                    <eati:Assignment>
+                        <eati:Target>global.MissionSuccess</eati:Target>
+                        <eati:Expression>
+                            <eati:Formula>random.random() * context.get("estimated_success", 0.5)</eati:Formula>
+                        </eati:Expression>
+                    </eati:Assignment>
+                </eati:Assignments>
+            </eati:InternalFunction>
+            <eati:DelayTime>
+                <eati:Distribution>exponential</eati:Distribution>
+                <eati:Parameters>
+                    <eati:Parameter name="rate">0.05</eati:Parameter>
+                </eati:Parameters>
+            </eati:DelayTime>
+            <eati:Outputs>
+                <eati:Output name="action_result" type="double"/>
+            </eati:Outputs>
+        </eati:Activity>
+    </eati:Activities>
+
+    <!-- 修正的交互定义 - 移除独立触发条件 -->
+    <eati:Interactions>
+        <!-- 侦察报告交互 - 由Activity驱动 -->
+        <eati:Interaction id="int_scout_report">
+            <eati:Name>ScoutReport</eati:Name>
+            <eati:Description>侦察员向指挥员报告发现</eati:Description>
+            <eati:Source>ent_scout</eati:Source>
+            <eati:Target>ent_commander</eati:Target>
+            <eati:SourceActivity>activity_prepare_report</eati:SourceActivity>
+            <eati:TargetAction>act_make_decision</eati:TargetAction>
+            <eati:Type>async</eati:Type>
+            <eati:Protocol>publish-subscribe</eati:Protocol>
+            <eati:ExecutionSemantics>
+                <eati:SourceBehavior>
+                    <!-- 移除独立的SendTrigger，由Activity内部驱动 -->
+                    <eati:MessageConstruction>
+                        <eati:DataMapping>
+                            <eati:Mapping>
+                                <eati:SourceField>context.target_location</eati:SourceField>
+                                <eati:TargetField>target_data</eati:TargetField>
+                            </eati:Mapping>
+                            <eati:Mapping>
+                                <eati:SourceField>context.confidence</eati:SourceField>
+                                <eati:TargetField>detection_confidence</eati:TargetField>
+                            </eati:Mapping>
+                        </eati:DataMapping>
+                    </eati:MessageConstruction>
+                </eati:SourceBehavior>
+                <eati:TargetBehavior>
+                    <eati:ProcessingBehavior>
+                        <eati:ProcessingType>immediate</eati:ProcessingType>
+                        <eati:ActionTrigger>
+                            <eati:TriggerMode>direct</eati:TriggerMode>
+                            <eati:TargetAction>act_make_decision</eati:TargetAction>
+                            <eati:ContextData>
+                                <eati:DataItem>
+                                    <eati:Name>report_data</eati:Name>
+                                    <eati:Source>message</eati:Source>
+                                </eati:DataItem>
+                                <eati:DataItem>
+                                    <eati:Name>scout_id</eati:Name>
+                                    <eati:Source>source_entity_id</eati:Source>
+                                </eati:DataItem>
+                            </eati:ContextData>
+                            <eati:Priority>1</eati:Priority>
+                        </eati:ActionTrigger>
+                        <eati:StateUpdates>
+                            <eati:StateUpdate>
+                                <eati:Target>self.received_report</eati:Target>
+                                <eati:UpdateExpression>
+                                    <eati:Formula>true</eati:Formula>
+                                </eati:UpdateExpression>
+                            </eati:StateUpdate>
+                        </eati:StateUpdates>
+                    </eati:ProcessingBehavior>
+                </eati:TargetBehavior>
+                <eati:DeliveryGuarantee>at-least-once</eati:DeliveryGuarantee>
+            </eati:ExecutionSemantics>
+            <eati:Inputs>
+                <eati:Input name="target_location" type="dict"/>
+                <eati:Input name="confidence" type="double"/>
+                <eati:Input name="report_time" type="time"/>
+            </eati:Inputs>
+            <eati:Traceable>true</eati:Traceable>
+        </eati:Interaction>
+
+        <!-- 命令交互 - 由Activity驱动 -->
+        <eati:Interaction id="int_command_order">
+            <eati:Name>CommandOrder</eati:Name>
+            <eati:Description>指挥员向执行员下达命令</eati:Description>
+            <eati:Source>ent_commander</eati:Source>
+            <eati:Target>ent_executor</eati:Target>
+            <eati:SourceActivity>activity_send_command</eati:SourceActivity>
+            <eati:TargetAction>act_execute_task</eati:TargetAction>
+            <eati:Type>sync</eati:Type>
+            <eati:Protocol>request-reply</eati:Protocol>
+            <eati:ExecutionSemantics>
+                <eati:SourceBehavior>
+                    <!-- 移除独立的SendTrigger，由Activity内部驱动 -->
+                    <eati:MessageConstruction>
+                        <eati:DataMapping>
+                            <eati:Mapping>
+                                <eati:SourceField>context.action_type</eati:SourceField>
+                                <eati:TargetField>order_type</eati:TargetField>
+                            </eati:Mapping>
+                            <eati:Mapping>
+                                <eati:SourceField>context.estimated_success</eati:SourceField>
+                                <eati:TargetField>success_probability</eati:TargetField>
+                            </eati:Mapping>
+                        </eati:DataMapping>
+                    </eati:MessageConstruction>
+                    <eati:ResponseHandling>
+                        <eati:ExpectedResponse>true</eati:ExpectedResponse>
+                        <eati:ResponseTimeout>10</eati:ResponseTimeout>
+                    </eati:ResponseHandling>
+                </eati:SourceBehavior>
+                <eati:TargetBehavior>
+                    <eati:ProcessingBehavior>
+                        <eati:ProcessingType>immediate</eati:ProcessingType>
+                        <eati:ActionTrigger>
+                            <eati:TriggerMode>direct</eati:TriggerMode>
+                            <eati:TargetAction>act_execute_task</eati:TargetAction>
+                            <eati:ContextData>
+                                <eati:DataItem>
+                                    <eati:Name>order_data</eati:Name>
+                                    <eati:Source>message</eati:Source>
+                                </eati:DataItem>
+                                <eati:DataItem>
+                                    <eati:Name>estimated_success</eati:Name>
+                                    <eati:Source>message.success_probability</eati:Source>
+                                </eati:DataItem>
+                                <eati:DataItem>
+                                    <eati:Name>commander_id</eati:Name>
+                                    <eati:Source>source_entity_id</eati:Source>
+                                </eati:DataItem>
+                            </eati:ContextData>
+                            <eati:Priority>1</eati:Priority>
+                        </eati:ActionTrigger>
+                        <eati:StateUpdates>
+                            <eati:StateUpdate>
+                                <eati:Target>self.received_order</eati:Target>
+                                <eati:UpdateExpression>
+                                    <eati:Formula>true</eati:Formula>
+                                </eati:UpdateExpression>
+                            </eati:StateUpdate>
+                        </eati:StateUpdates>
+                    </eati:ProcessingBehavior>
+                    <eati:ResponseGeneration>
+                        <eati:GenerateResponse>true</eati:GenerateResponse>
+                        <eati:ResponseData>
+                            <eati:ResponseField>
+                                <eati:Name>acknowledgment</eati:Name>
+                                <eati:ValueExpression>
+                                    <eati:Formula>true</eati:Formula>
+                                </eati:ValueExpression>
+                                <eati:Type>boolean</eati:Type>
+                            </eati:ResponseField>
+                            <eati:ResponseField>
+                                <eati:Name>executor_status</eati:Name>
+                                <eati:ValueExpression>
+                                    <eati:Formula>self.action_status</eati:Formula>
+                                </eati:ValueExpression>
+                                <eati:Type>string</eati:Type>
+                            </eati:ResponseField>
+                        </eati:ResponseData>
+                    </eati:ResponseGeneration>
+                </eati:TargetBehavior>
+                <eati:DeliveryGuarantee>exactly-once</eati:DeliveryGuarantee>
+            </eati:ExecutionSemantics>
+            <eati:Inputs>
+                <eati:Input name="action_type" type="string"/>
+                <eati:Input name="priority" type="string"/>
+                <eati:Input name="estimated_success" type="double"/>
+                <eati:Input name="order_time" type="time"/>
+            </eati:Inputs>
+            <eati:Outputs>
+                <eati:Output name="acknowledgment" type="boolean"/>
+                <eati:Output name="executor_status" type="string"/>
+            </eati:Outputs>
+            <eati:Traceable>true</eati:Traceable>
+        </eati:Interaction>
+    </eati:Interactions>
+
+    <!-- 简化的事件定义 - 仅保留任务完成监控 -->
+    <eati:Events>
+        <!-- 任务完成事件 - 用于仿真结束检查 -->
+        <eati:Event id="evt_mission_complete">
+            <eati:Name>MissionComplete</eati:Name>
+            <eati:Description>任务完成检查事件</eati:Description>
+            <eati:Type>condition</eati:Type>
+            <eati:TriggerCondition>
+                <eati:Type>condition</eati:Type>
+                <eati:Expression>
+                    <eati:Formula>global.ActionCompleted == true</eati:Formula>
+                </eati:Expression>
+            </eati:TriggerCondition>
+            <eati:Priority>0</eati:Priority>
+            <eati:Repeatable>false</eati:Repeatable>
+        </eati:Event>
+       <eati:Event id="evt_command_ready">
+           <eati:Name>CommandReady</eati:Name>
+           <eati:Type>condition</eati:Type>
+           <eati:TriggerCondition>
+            <eati:Type>condition</eati:Type>
+            <eati:Expression>
+                <eati:Formula>global.CommandReady == true</eati:Formula>
+            </eati:Expression>
+        </eati:TriggerCondition>
+        <eati:Actions>
+            <eati:ActionRef>act_issue_command</eati:ActionRef>
+        </eati:Actions>
+        <eati:Priority>1</eati:Priority>
+        <eati:Repeatable>false</eati:Repeatable>
+    </eati:Event>
+    </eati:Events>
+
+    <!-- 监控器定义 -->
+    <eati:Monitors>
+        <!-- 任务进度监控 -->
+        <eati:Monitor id="mon_progress">
+            <eati:Name>ProgressMonitor</eati:Name>
+            <eati:Description>监控仿真进度</eati:Description>
+            <eati:Target>global</eati:Target>
+            <eati:Metric>TargetDetected,ActionCompleted,MissionSuccess</eati:Metric>
+            <eati:SampleInterval>10</eati:SampleInterval>
+            <eati:StreamOutput>true</eati:StreamOutput>
+        </eati:Monitor>
+
+        <!-- 实体状态监控 -->
+        <eati:Monitor id="mon_entities">
+            <eati:Name>EntityMonitor</eati:Name>
+            <eati:Description>监控实体状态变化</eati:Description>
+            <eati:Target>all_entities</eati:Target>
+            <eati:Metric>state_variables</eati:Metric>
+            <eati:SampleInterval>15</eati:SampleInterval>
+            <eati:StreamOutput>true</eati:StreamOutput>
+        </eati:Monitor>
+
+        <!-- 交互追踪监控 -->
+        <eati:Monitor id="mon_interactions">
+            <eati:Name>InteractionMonitor</eati:Name>
+            <eati:Description>监控实体间交互</eati:Description>
+            <eati:Target>all_interactions</eati:Target>
+            <eati:Metric>message_count,response_time</eati:Metric>
+            <eati:SampleInterval>5</eati:SampleInterval>
+            <eati:StreamOutput>true</eati:StreamOutput>
+        </eati:Monitor>
+    </eati:Monitors>
+
+</eati:EATIModel>
